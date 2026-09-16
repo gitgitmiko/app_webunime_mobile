@@ -24,6 +24,8 @@ class CatalogApi(
 
     suspend fun anime(slug: String): AnimeDetail = repo.anime(slug)
 
+    suspend fun seasonsFor(slug: String): List<SeasonGroup> = repo.seasonsFor(slug)
+
     suspend fun episode(slug: String, n: Int): EpisodePlayback =
         repo.episode(slug, n)
 }

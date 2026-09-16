@@ -1,5 +1,10 @@
 ﻿package com.webunime.mobile.ui.search
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,10 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,12 +31,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.webunime.mobile.WebunimeApp
 import com.webunime.mobile.data.AnimeCard
+import com.webunime.mobile.ui.theme.Appear
+import com.webunime.mobile.ui.theme.WuBg
+import com.webunime.mobile.ui.theme.WuStroke
+import com.webunime.mobile.ui.theme.WuSurface
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -71,24 +81,43 @@ fun SearchScreen(
     Column(
         Modifier
             .fillMaxSize()
+            .background(
+                Brush.verticalGradient(listOf(WuSurface.copy(alpha = 0.55f), WuBg, WuBg)),
+            )
             .padding(contentPadding),
     ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = {
-                query = it
-                search(it)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            singleLine = true,
-            label = { Text("Cari anime") },
-            placeholder = { Text("Judul / slugâ€¦") },
-        )
+        Appear {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text("Cari", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    "Ketik minimal 2 huruf",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = {
+                        query = it
+                        search(it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    label = { Text("Judul anime") },
+                    placeholder = { Text("Contoh: One Piece") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = WuStroke,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
+            }
+        }
         when {
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             error != null -> Text(
                 error ?: "",
@@ -104,26 +133,38 @@ fun SearchScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(items) { item ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { item.slug?.let(onOpenAnime) },
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AsyncImage(
-                            model = item.thumbnail,
-                            contentDescription = item.displayTitle(),
-                            contentScale = ContentScale.Crop,
+                items(items, key = { it.slug ?: it.displayTitle() }) { item ->
+                    AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+                        val shape = MaterialTheme.shapes.medium
+                        Row(
                             modifier = Modifier
-                                .size(64.dp, 90.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                        )
-                        Column {
-                            Text(item.displayTitle(), style = MaterialTheme.typography.titleSmall)
-                            item.rating?.let {
-                                Text("â˜… $it", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                .fillMaxWidth()
+                                .clip(shape)
+                                .border(1.dp, WuStroke.copy(alpha = 0.5f), shape)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { item.slug?.let(onOpenAnime) }
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(
+                                model = item.thumbnail,
+                                contentDescription = item.displayTitle(),
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(64.dp, 90.dp)
+                                    .clip(MaterialTheme.shapes.small),
+                            )
+                            Column {
+                                Text(item.displayTitle(), style = MaterialTheme.typography.titleSmall)
+                                item.rating?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        "\u2605 $it",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
                             }
                         }
                     }

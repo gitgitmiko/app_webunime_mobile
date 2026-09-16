@@ -4,15 +4,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -20,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -32,6 +40,7 @@ import com.webunime.mobile.ui.detail.DetailScreen
 import com.webunime.mobile.ui.home.HomeScreen
 import com.webunime.mobile.ui.search.SearchScreen
 import com.webunime.mobile.ui.theme.WebunimeTheme
+import com.webunime.mobile.ui.theme.WuSurface
 import com.webunime.mobile.ui.update.AppUpdateHost
 
 class MainActivity : ComponentActivity() {
@@ -43,15 +52,30 @@ class MainActivity : ComponentActivity() {
                 val nav = rememberNavController()
                 val backStack by nav.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route.orEmpty()
-                val showBottom = route in setOf("home", "search", "calendar", "account")
+                val showBottom = route in setOf("home", "search", "calendar", "settings")
                 var updateCheckTrigger by remember { mutableIntStateOf(0) }
 
                 AppUpdateHost(autoCheck = true, checkTrigger = updateCheckTrigger)
 
                 Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
-                        if (showBottom) {
-                            NavigationBar {
+                        AnimatedVisibility(
+                            visible = showBottom,
+                            enter = slideInVertically { it } + fadeIn(),
+                            exit = slideOutVertically { it } + fadeOut(),
+                        ) {
+                            NavigationBar(
+                                containerColor = WuSurface.copy(alpha = 0.96f),
+                                tonalElevation = 0.dp,
+                            ) {
+                                val colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 NavigationBarItem(
                                     selected = route == "home",
                                     onClick = {
@@ -62,6 +86,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     icon = { Icon(Icons.Default.Home, null) },
                                     label = { Text("Home") },
+                                    colors = colors,
                                 )
                                 NavigationBarItem(
                                     selected = route == "search",
@@ -70,6 +95,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     icon = { Icon(Icons.Default.Search, null) },
                                     label = { Text("Cari") },
+                                    colors = colors,
                                 )
                                 NavigationBarItem(
                                     selected = route == "calendar",
@@ -78,14 +104,16 @@ class MainActivity : ComponentActivity() {
                                     },
                                     icon = { Icon(Icons.Default.CalendarMonth, null) },
                                     label = { Text("Jadwal") },
+                                    colors = colors,
                                 )
                                 NavigationBarItem(
-                                    selected = route == "account",
+                                    selected = route == "settings",
                                     onClick = {
-                                        nav.navigate("account") { launchSingleTop = true }
+                                        nav.navigate("settings") { launchSingleTop = true }
                                     },
-                                    icon = { Icon(Icons.Default.Person, null) },
-                                    label = { Text("Akun") },
+                                    icon = { Icon(Icons.Default.Settings, null) },
+                                    label = { Text("Settings") },
+                                    colors = colors,
                                 )
                             }
                         }
@@ -111,7 +139,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenAnime = { slug -> nav.navigate("detail/$slug") },
                             )
                         }
-                        composable("account") {
+                        composable("settings") {
                             AccountScreen(
                                 onCheckUpdate = { updateCheckTrigger++ },
                             )
@@ -124,11 +152,6 @@ class MainActivity : ComponentActivity() {
                             DetailScreen(
                                 slug = slug,
                                 onBack = { nav.popBackStack() },
-                                onGoAccount = {
-                                    nav.navigate("account") {
-                                        launchSingleTop = true
-                                    }
-                                },
                             )
                         }
                     }

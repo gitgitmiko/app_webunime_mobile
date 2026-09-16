@@ -30,6 +30,7 @@ class CatalogRepository(
     private val githubJsDelivrBase: String = DEFAULT_JSDELIVR,
 ) {
     private val moshi: Moshi = Moshi.Builder()
+        .add(LenientIntAdapter())
         .add(KotlinJsonAdapterFactory())
         .build()
 
@@ -69,6 +70,9 @@ class CatalogRepository(
     suspend fun home(): HomeResponse = withContext(Dispatchers.IO) {
         ensureLightFiles()
         val latest = readLatestList(FILE_LATEST)
+        val anime = readAnimeList(FILE_INDEX).map { it.toCard() }.ifEmpty {
+            readCardList(FILE_INDEX)
+        }.take(HOME_ANIME_LIMIT)
         val movies = readAnimeList(FILE_MOVIES).map { it.toCard() }.ifEmpty {
             readCardList(FILE_MOVIES)
         }
@@ -76,6 +80,7 @@ class CatalogRepository(
         HomeResponse(
             updatedAt = schedule.scraped_at,
             latest = latest,
+            anime = anime,
             movies = movies,
             scheduleToday = schedule.days.firstOrNull {
                 it.day.equals(schedule.today, ignoreCase = true)
@@ -113,6 +118,45 @@ class CatalogRepository(
     suspend fun anime(slug: String): AnimeDetail = withContext(Dispatchers.IO) {
         val item = hydrate(slug) ?: error("Anime tidak ditemukan: $slug")
         item.toDetail()
+    }
+
+    /**
+     * Season saat ini + related (S1/S2/…) untuk dropdown terpisah.
+     * Related di-hydrate on-demand (cache dipakai ulang).
+     */
+    suspend fun seasonsFor(slug: String): List<SeasonGroup> = withContext(Dispatchers.IO) {
+        val current = hydrate(slug) ?: error("Anime tidak ditemukan: $slug")
+        val groups = mutableListOf<SeasonGroup>()
+        val currentSlug = current.slug?.takeIf { it.isNotBlank() } ?: slug
+        groups += SeasonGroup(
+            label = SeasonLabels.from(current.judul ?: current.nama, currentSlug, current.season_label),
+            animeSlug = currentSlug,
+            episodes = current.toDetail().episodes,
+            isCurrent = true,
+        )
+        val seen = mutableSetOf(currentSlug.lowercase(Locale.ROOT))
+        for (rel in current.related) {
+            val relSlug = rel.slug?.trim().orEmpty()
+            if (relSlug.isBlank()) continue
+            if (!seen.add(relSlug.lowercase(Locale.ROOT))) continue
+            val item = hydrate(relSlug) ?: continue
+            val detail = item.toDetail()
+            if (detail.episodes.isEmpty()) continue
+            groups += SeasonGroup(
+                label = SeasonLabels.from(
+                    rel.title ?: item.judul ?: item.nama,
+                    relSlug,
+                    item.season_label,
+                ),
+                animeSlug = relSlug,
+                episodes = detail.episodes,
+                isCurrent = false,
+            )
+        }
+        groups.sortedWith(
+            compareBy<SeasonGroup> { SeasonLabels.sortKey(it.label) }
+                .thenBy { it.label },
+        )
     }
 
     suspend fun episode(slug: String, n: Int): EpisodePlayback = withContext(Dispatchers.IO) {
@@ -342,6 +386,7 @@ class CatalogRepository(
         private const val FILE_SCHEDULE = "anime-schedule.json"
         private const val FILE_INDEX = "anime-index.json"
         private const val FILE_ANIME = "anime.json"
+        private const val HOME_ANIME_LIMIT = 24
 
         private val LIGHT_FILES = listOf(
             FILE_LATEST,

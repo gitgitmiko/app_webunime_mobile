@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="wu_bg">#141414</color>
-    <color name="wu_accent">#E50914</color>
-    <color name="wu_text">#FFFFFF</color>
+    <color name="wu_bg">#0B0D10</color>
+    <color name="wu_accent">#E11D48</color>
+    <color name="wu_text">#F4F1EC</color>
 </resources>

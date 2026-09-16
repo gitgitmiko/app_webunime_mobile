@@ -7,6 +7,7 @@ import com.squareup.moshi.JsonClass
 data class HomeResponse(
     val updatedAt: String? = null,
     val latest: List<LatestItem> = emptyList(),
+    val anime: List<AnimeCard> = emptyList(),
     val movies: List<AnimeCard> = emptyList(),
     val scheduleToday: ScheduleDay? = null,
 )
@@ -90,10 +91,29 @@ data class AnimeDetail(
     val sinopsis: String? = null,
     val episodes_count: Int? = null,
     val mal_id: Int? = null,
+    val season_label: String? = null,
+    val related: List<RelatedAnime> = emptyList(),
     val episodes: List<EpisodeSummary> = emptyList(),
 ) {
     fun displayTitle(): String = judul ?: nama ?: slug ?: "Tanpa judul"
 }
+
+@JsonClass(generateAdapter = false)
+data class RelatedAnime(
+    val title: String? = null,
+    val slug: String? = null,
+    val source: String? = null,
+) {
+    fun displayTitle(): String = title?.takeIf { it.isNotBlank() } ?: slug ?: "Season"
+}
+
+/** Grup episode per season untuk dropdown di detail/player. */
+data class SeasonGroup(
+    val label: String,
+    val animeSlug: String,
+    val episodes: List<EpisodeSummary>,
+    val isCurrent: Boolean = false,
+)
 
 @JsonClass(generateAdapter = false)
 data class EpisodeSummary(
@@ -103,7 +123,20 @@ data class EpisodeSummary(
     val source: String? = null,
     val has_players: Boolean? = null,
     val skip: Any? = null,
-)
+) {
+    fun displayLabel(): String {
+        val n = episode
+        val raw = title?.takeIf { it.isNotBlank() }
+        if (n != null) {
+            // Samakan label biar urut kebaca: "Episode 12"
+            if (raw == null || !raw.contains(n.toString())) {
+                return "Episode $n"
+            }
+        }
+        return raw ?: "Episode ${n ?: "?"}"
+    }
+}
+
 
 @JsonClass(generateAdapter = false)
 data class EpisodePlayback(
@@ -147,6 +180,8 @@ data class CatalogAnimeItem(
     val sinopsis: String? = null,
     val episodes_count: Int? = null,
     val mal_id: Int? = null,
+    val season_label: String? = null,
+    val related: List<RelatedAnime> = emptyList(),
     val episodes: List<CatalogEpisode> = emptyList(),
     val players: List<PlayerServer> = emptyList(),
 ) {
@@ -154,15 +189,19 @@ data class CatalogAnimeItem(
 
     fun toDetail(): AnimeDetail {
         val eps = episodes.map { ep ->
+            val num = EpisodeNumbers.resolve(ep.episodeNumber(), ep.title, ep.slug)
             EpisodeSummary(
-                episode = ep.episode,
+                episode = num,
                 title = ep.title,
                 slug = ep.slug,
                 source = ep.source,
                 has_players = ep.players.isNotEmpty() || players.isNotEmpty(),
                 skip = ep.skip,
             )
-        }
+        }.sortedWith(
+            compareBy<EpisodeSummary> { it.episode ?: Int.MAX_VALUE }
+                .thenBy { it.title.orEmpty() },
+        )
         return AnimeDetail(
             slug = slug,
             judul = judul,
@@ -174,6 +213,8 @@ data class CatalogAnimeItem(
             sinopsis = sinopsis,
             episodes_count = episodes_count ?: eps.size.takeIf { it > 0 },
             mal_id = mal_id,
+            season_label = season_label,
+            related = related,
             episodes = eps,
         )
     }
@@ -190,7 +231,10 @@ data class CatalogAnimeItem(
     )
 
     fun playbackFor(n: Int): EpisodePlayback {
-        val ep = episodes.firstOrNull { it.episode == n }
+        val ep = episodes.firstOrNull {
+            EpisodeNumbers.resolve(it.episodeNumber(), it.title, it.slug) == n
+        }
+            ?: episodes.firstOrNull { it.episodeNumber() == n }
             ?: episodes.firstOrNull { it.episode == null && n == 1 }
             ?: episodes.getOrNull(n - 1)
         val players = when {
@@ -198,13 +242,16 @@ data class CatalogAnimeItem(
             players.isNotEmpty() -> players
             else -> emptyList()
         }
+        val resolved = ep?.let {
+            EpisodeNumbers.resolve(it.episodeNumber(), it.title, it.slug)
+        } ?: n
         return EpisodePlayback(
             slug = slug,
             judul = displayTitle(),
             thumbnail = thumbnail,
             episode = EpisodePayload(
-                episode = ep?.episode ?: n,
-                title = ep?.title ?: "Episode $n",
+                episode = resolved,
+                title = ep?.title ?: "Episode $resolved",
                 slug = ep?.slug,
                 source = ep?.source,
                 players = players,
@@ -216,10 +263,13 @@ data class CatalogAnimeItem(
 
 @JsonClass(generateAdapter = false)
 data class CatalogEpisode(
-    val episode: Int? = null,
+    val episode: Double? = null,
     val title: String? = null,
     val slug: String? = null,
     val source: String? = null,
     val players: List<PlayerServer> = emptyList(),
     val skip: Any? = null,
-)
+) {
+    fun episodeNumber(): Int? = episode?.let { kotlin.math.round(it).toInt() }
+}
+
