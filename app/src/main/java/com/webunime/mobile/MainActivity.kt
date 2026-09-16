@@ -16,6 +16,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -29,6 +32,7 @@ import com.webunime.mobile.ui.detail.DetailScreen
 import com.webunime.mobile.ui.home.HomeScreen
 import com.webunime.mobile.ui.search.SearchScreen
 import com.webunime.mobile.ui.theme.WebunimeTheme
+import com.webunime.mobile.ui.update.AppUpdateHost
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +44,9 @@ class MainActivity : ComponentActivity() {
                 val backStack by nav.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route.orEmpty()
                 val showBottom = route in setOf("home", "search", "calendar", "account")
+                var updateCheckTrigger by remember { mutableIntStateOf(0) }
+
+                AppUpdateHost(autoCheck = true, checkTrigger = updateCheckTrigger)
 
                 Scaffold(
                     bottomBar = {
@@ -105,7 +112,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("account") {
-                            AccountScreen()
+                            AccountScreen(
+                                onCheckUpdate = { updateCheckTrigger++ },
+                            )
                         }
                         composable(
                             route = "detail/{slug}",

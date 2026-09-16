@@ -35,7 +35,10 @@ import com.webunime.mobile.WebunimeApp
 import kotlinx.coroutines.launch
 
 @Composable
-fun AccountScreen(contentPadding: PaddingValues = PaddingValues()) {
+fun AccountScreen(
+    contentPadding: PaddingValues = PaddingValues(),
+    onCheckUpdate: () -> Unit = {},
+) {
     val context = LocalContext.current
     val activity = context as Activity
     val app = context.applicationContext as WebunimeApp
@@ -189,6 +192,18 @@ fun AccountScreen(contentPadding: PaddingValues = PaddingValues()) {
         message?.let {
             Text(it, color = MaterialTheme.colorScheme.primary)
         }
+
+        Text("Aplikasi", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Versi ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(
+            onClick = onCheckUpdate,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Cek update") }
     }
 }
 
