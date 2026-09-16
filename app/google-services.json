@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "347556929487",
+    "firebase_url": "https://myproject-fbbb9.firebaseio.com",
+    "project_id": "myproject-fbbb9",
+    "storage_bucket": "myproject-fbbb9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:347556929487:android:f0d9e6c737d89a6c39fcba",
+        "android_client_info": {
+          "package_name": "com.webunime.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "347556929487-ebros1m4dv2t905rprl7t26kqejhq7is.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.webunime.mobile",
+            "certificate_hash": "91ac0f228517d462ed4e555303f28b7a095c714e"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkNOjJXiokNa-iLuzxnj157iWGNwrQZKI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
