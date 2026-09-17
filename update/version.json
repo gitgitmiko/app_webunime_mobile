@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "0.3.0",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.0/Weeboonime-v0.3.0.apk",
-  "changelog": "Rebrand Weeboonime + UI modern (Home/Detail/Player/Jadwal/Settings), logo app, urutan Home, perbaikan player."
+  "versionCode": 4,
+  "versionName": "0.3.1",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.1/Weeboonime-v0.3.1.apk",
+  "changelog": "APK release bertanda tangan (perbaikan install di HyperOS/Poco). UI Weeboonime 0.3.x."
 }
