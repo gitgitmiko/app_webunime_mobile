@@ -788,47 +788,40 @@ ${wrapperIframeBridgeJs()}
   window.__wuSetQuality=function(idx){
     try{
       var jp=__wuJwAny();
-      if(!jp||typeof jp.setCurrentQuality!=="function") return;
+      if(!jp) return;
       idx=Number(idx);
       if(!isFinite(idx)||idx<0) return;
-      window.__wuHoldPlay=true;
-      try{ if(typeof jp.pause==="function") jp.pause(); }catch(e){}
+      window.__wuHoldPlay=false;
       try{ jp.setCurrentQuality(idx); }catch(e){}
-      // 1080/720 underrun kalau langsung play. Tunggu buffer dulu, lalu lanjut.
-      var need=8;
       try{
-        var levels=typeof jp.getQualityLevels==="function"?jp.getQualityLevels():[];
-        var l=levels[idx]||{};
-        var h=Number(l.height)||0;
-        var label=String(l.label||"");
-        if(h>=1000||/1080|fhd/.test(label)) need=16;
-        else if(h>=700||/720/.test(label)) need=12;
+        var hls=null;
+        try{ var pr=typeof jp.getProvider==="function"?jp.getProvider():null; hls=pr&&(pr.hls||pr.hlsjs||pr._hls||pr.hlsProvider); }catch(e){}
+        if(!hls){
+          try{ hls=window.hls||window.__hls||null; }catch(e2){}
+        }
+        if(hls){
+          if(typeof hls.currentLevel!=="undefined") hls.currentLevel=idx;
+          else if(typeof hls.loadLevel!=="undefined") hls.loadLevel=idx;
+          if(typeof hls.nextLevel!=="undefined") hls.nextLevel=idx;
+        }
       }catch(e){}
-      var n=0;
-      var iv=setInterval(function(){
-        n++;
-        try{
-          var v=__wuVideo();
-          if(!v){ if(n>48){ window.__wuHoldPlay=false; clearInterval(iv); } return; }
-          v.preload="auto";
-          var ahead=0;
-          try{
-            if(v.buffered&&v.buffered.length){
-              ahead=v.buffered.end(v.buffered.length-1)-(v.currentTime||0);
-            }
-          }catch(e){}
-          if(ahead>=need||n>48){
-            clearInterval(iv);
-            window.__wuHoldPlay=false;
-            if(!window.__wuUserPaused){
-              try{ jp.play(); }catch(e){}
-              try{ v.play(); }catch(e){}
-            }
-          }
-        }catch(e){ window.__wuHoldPlay=false; clearInterval(iv); }
-      }, 250);
+      try{ if(typeof jp.play==="function") jp.play(true); }catch(e){}
+      try{ var v=__wuVideo(); if(v&&v.paused) v.play(); }catch(e){}
     }catch(e){}
   };
+  document.addEventListener("click", function(ev){
+    try{
+      var t=ev.target;
+      if(!t||!t.closest) return;
+      var item=t.closest(".jw-settings-content-item,.jw-submenu-item,.jw-settings-submenu-item");
+      if(!item) return;
+      var menu=item.closest(".jw-settings-submenu-quality,.jw-settings-quality,[class*='quality']");
+      if(!menu) return;
+      var items=menu.querySelectorAll(".jw-settings-content-item,.jw-submenu-item,.jw-settings-submenu-item");
+      var idx=Array.prototype.indexOf.call(items, item);
+      if(idx>=0) window.__wuSetQuality(idx);
+    }catch(e){}
+  }, true);
   // Deteksi <video> → beri tahu app (agar tombol OK beralih ke mode toggle),
   // dan sinkronkan bar judul (hilang saat play, muncul saat pause).
   // Selain event, status paused juga di-POLL agar terlaporkan walau video sudah
@@ -921,7 +914,9 @@ ${wrapperIframeBridgeJs()}
           /* frame putih: border putih / box-shadow terang di tepi player */
           ".jwplayer,[class*='player'],[id*='player']{",
           "border-color:transparent!important;}",
-          "iframe{border:0!important;outline:0!important;}"
+          "iframe{border:0!important;outline:0!important;}",
+          ".jw-display,.jw-preview{display:none!important;opacity:0!important;pointer-events:none!important;}",
+          ".jw-media,video{width:100%!important;height:100%!important;opacity:1!important;visibility:visible!important;background:transparent!important;object-fit:contain!important;}"
         ].join("");
         (document.head||document.documentElement).appendChild(s);
       }catch(e){}
@@ -1120,9 +1115,10 @@ ${wrapperIframeBridgeJs()}
       var s=document.createElement("style");
       s.setAttribute("data-webunime-mobile-controls","1");
       s.textContent=[
-        ".jw-controlbar,.jw-controls,.jw-display{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:40!important;}",
-        "video,.jw-media,.jw-wrapper{pointer-events:auto!important;}",
-        "#overlay{pointer-events:none!important;}"
+        ".jw-controlbar,.jw-controls{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:50!important;}",
+        ".jw-display,.jw-preview{display:none!important;opacity:0!important;pointer-events:none!important;}",
+        ".jw-media,video{width:100%!important;height:100%!important;opacity:1!important;visibility:visible!important;background:transparent!important;object-fit:contain!important;pointer-events:auto!important;}",
+        "#overlay{pointer-events:none!important;display:none!important;}"
       ].join("");
       (document.head||document.documentElement).appendChild(s);
     }catch(e){}

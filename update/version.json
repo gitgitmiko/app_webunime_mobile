@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "0.3.5",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.5/Weeboonime-v0.3.5.apk",
-  "changelog": "Player film tanpa dropdown episode, tombol Putar ber-badge HD, kontrol Hydrax/TurboVIP/P2P tampil di HP."
+  "versionCode": 9,
+  "versionName": "0.3.6",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.6/Weeboonime-v0.3.6.apk",
+  "changelog": "Hydrax: perbaiki layar hitam (overlay JW) dan ganti resolusi yang tidak terpasang."
 }
