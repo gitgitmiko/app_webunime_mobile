@@ -5,8 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,11 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
@@ -47,38 +42,32 @@ import com.webunime.mobile.data.HomeResponse
 import com.webunime.mobile.ui.components.BrandHeader
 import com.webunime.mobile.ui.components.HorizontalPosterRow
 import com.webunime.mobile.ui.components.SectionTitle
-import com.webunime.mobile.ui.theme.Appear
 import com.webunime.mobile.ui.theme.WuBg
-import com.webunime.mobile.ui.theme.WuStroke
 import com.webunime.mobile.ui.theme.WuSurface
-import com.webunime.mobile.ui.theme.WuSurfaceHigh
 import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
+    catalogMode: String,
     onOpenAnime: (slug: String) -> Unit,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
+    onChangeCatalog: () -> Unit,
     contentPadding: PaddingValues = PaddingValues(),
 ) {
+    if (catalogMode == "film") {
+        FilmCatalog(
+            contentPadding = contentPadding,
+            onBack = onChangeCatalog,
+            onOpenTitle = onOpenTitle,
+        )
+        return
+    }
+
     val app = LocalContext.current.applicationContext as WebunimeApp
     val scope = rememberCoroutineScope()
     var home by remember { mutableStateOf<HomeResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var mode by rememberSaveable { mutableStateOf<String?>(null) }
-
-    if (mode == null) {
-        CatalogChooser(contentPadding) { picked -> mode = picked }
-        return
-    }
-    if (mode == "film") {
-        FilmCatalog(
-            contentPadding = contentPadding,
-            onBack = { mode = null },
-            onOpenTitle = onOpenTitle,
-        )
-        return
-    }
 
     fun reload() {
         scope.launch {
@@ -130,95 +119,73 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         item {
-                            Appear {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { mode = null }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Katalog")
-                                    }
-                                    Text(
-                                        "Anime",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = onChangeCatalog) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Katalog")
                                 }
+                                Text(
+                                    "Anime",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
                             }
                         }
-                        item {
-                            Appear { BrandHeader() }
-                        }
+                        item { BrandHeader() }
                         if (data.latest.isNotEmpty()) {
+                            item { SectionTitle("Anime Terbaru") }
                             item {
-                                Appear(delayMs = 60) { SectionTitle("Anime Terbaru") }
-                            }
-                            item {
-                                Appear(delayMs = 100) {
-                                    HorizontalPosterRow(
-                                        items = data.latest,
-                                        titleOf = { it.displayTitle() },
-                                        thumbOf = { it.thumbnail },
-                                        subtitleOf = { it.episode?.let { e -> "Ep $e" } },
-                                        onClick = { item ->
-                                            val slug = item.catalogSlug()
-                                            if (slug.isNotBlank()) onOpenAnime(slug)
-                                        },
-                                    )
-                                }
+                                HorizontalPosterRow(
+                                    items = data.latest,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    subtitleOf = { it.episode?.let { e -> "Ep $e" } },
+                                    onClick = { item ->
+                                        val slug = item.catalogSlug()
+                                        if (slug.isNotBlank()) onOpenAnime(slug)
+                                    },
+                                )
                             }
                         }
                         if (data.anime.isNotEmpty()) {
+                            item { SectionTitle("Anime") }
                             item {
-                                Appear(delayMs = 140) { SectionTitle("Anime") }
-                            }
-                            item {
-                                Appear(delayMs = 180) {
-                                    HorizontalPosterRow(
-                                        items = data.anime,
-                                        titleOf = { it.displayTitle() },
-                                        thumbOf = { it.thumbnail },
-                                        subtitleOf = {
-                                            it.rating?.takeIf { r -> r.isNotBlank() }
-                                                ?.let { r -> "\u2605 $r" }
-                                        },
-                                        onClick = { item -> item.slug?.let(onOpenAnime) },
-                                    )
-                                }
+                                HorizontalPosterRow(
+                                    items = data.anime,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    subtitleOf = {
+                                        it.rating?.takeIf { r -> r.isNotBlank() }
+                                            ?.let { r -> "\u2605 $r" }
+                                    },
+                                    onClick = { item -> item.slug?.let(onOpenAnime) },
+                                )
                             }
                         }
                         if (data.movies.isNotEmpty()) {
+                            item { SectionTitle("Anime Movie") }
                             item {
-                                Appear(delayMs = 220) { SectionTitle("Anime Movie") }
-                            }
-                            item {
-                                Appear(delayMs = 260) {
-                                    HorizontalPosterRow(
-                                        items = data.movies,
-                                        titleOf = { it.displayTitle() },
-                                        thumbOf = { it.thumbnail },
-                                        subtitleOf = {
-                                            it.rating?.takeIf { r -> r.isNotBlank() }
-                                                ?.let { r -> "\u2605 $r" }
-                                        },
-                                        onClick = { item -> item.slug?.let(onOpenAnime) },
-                                    )
-                                }
+                                HorizontalPosterRow(
+                                    items = data.movies,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    subtitleOf = {
+                                        it.rating?.takeIf { r -> r.isNotBlank() }
+                                            ?.let { r -> "\u2605 $r" }
+                                    },
+                                    onClick = { item -> item.slug?.let(onOpenAnime) },
+                                )
                             }
                         }
                         data.scheduleToday?.takeIf { it.items.isNotEmpty() }?.let { day ->
+                            item { SectionTitle("Jadwal ${day.label ?: "Hari Ini"}") }
                             item {
-                                Appear(delayMs = 300) {
-                                    SectionTitle("Jadwal ${day.label ?: "Hari Ini"}")
-                                }
-                            }
-                            item {
-                                Appear(delayMs = 340) {
-                                    HorizontalPosterRow(
-                                        items = day.items,
-                                        titleOf = { it.displayTitle() },
-                                        thumbOf = { it.thumbnail },
-                                        subtitleOf = { it.time },
-                                        onClick = { item -> item.slug?.let(onOpenAnime) },
-                                    )
-                                }
+                                HorizontalPosterRow(
+                                    items = day.items,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    subtitleOf = { it.time },
+                                    onClick = { item -> item.slug?.let(onOpenAnime) },
+                                )
                             }
                         }
                         item { Box(Modifier.fillMaxWidth().height(8.dp)) }
@@ -226,73 +193,6 @@ fun HomeScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CatalogChooser(
-    contentPadding: PaddingValues,
-    onPick: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-            .background(
-                Brush.verticalGradient(listOf(WuSurface.copy(alpha = 0.9f), WuBg, WuBg)),
-            )
-            .padding(horizontal = 16.dp),
-    ) {
-        BrandHeader(subtitle = "Pilih Anime atau Film")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            CatalogPickCard(
-                title = "Anime",
-                subtitle = "Episode, movie, jadwal",
-                modifier = Modifier.weight(1f),
-                onClick = { onPick("anime") },
-            )
-            CatalogPickCard(
-                title = "Film",
-                subtitle = "Film, horor, series",
-                modifier = Modifier.weight(1f),
-                onClick = { onPick("film") },
-            )
-        }
-    }
-}
-
-@Composable
-private fun CatalogPickCard(
-    title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val shape = RoundedCornerShape(18.dp)
-    Column(
-        modifier = modifier
-            .height(168.dp)
-            .clip(shape)
-            .background(WuSurfaceHigh)
-            .border(1.dp, WuStroke, shape)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

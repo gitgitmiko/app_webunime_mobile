@@ -48,6 +48,7 @@ data class AnimeCard(
     val type: String? = null,
     val genre: List<String>? = null,
     val episodes_count: Int? = null,
+    val catalog: String? = null,
 ) {
     fun displayTitle(): String = judul ?: nama ?: slug ?: "Tanpa judul"
 }
@@ -241,7 +242,7 @@ data class CatalogAnimeItem(
         )
     }
 
-    fun toCard(): AnimeCard = AnimeCard(
+    fun toCard(catalog: String? = null): AnimeCard = AnimeCard(
         slug = slug,
         judul = judul,
         nama = nama,
@@ -250,6 +251,7 @@ data class CatalogAnimeItem(
         type = type,
         genre = genre,
         episodes_count = episodes_count ?: episodes.size.takeIf { it > 0 },
+        catalog = catalog,
     )
 
     fun playbackFor(n: Int): EpisodePlayback {

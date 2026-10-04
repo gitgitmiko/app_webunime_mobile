@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SearchScreen(
-    onOpenAnime: (slug: String) -> Unit,
+    catalogMode: String,
+    onOpenTitle: (collection: String, slug: String) -> Unit,
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
@@ -71,11 +73,15 @@ fun SearchScreen(
             delay(350)
             loading = true
             error = null
-            runCatching { app.catalogApi.search(q.trim()) }
+            runCatching { app.catalogApi.search(q.trim(), catalogMode = catalogMode) }
                 .onSuccess { items = it.items }
                 .onFailure { error = it.message }
             loading = false
         }
+    }
+
+    LaunchedEffect(catalogMode) {
+        if (query.trim().length >= 2) search(query)
     }
 
     Column(
@@ -104,8 +110,12 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = MaterialTheme.shapes.medium,
-                    label = { Text("Judul anime") },
-                    placeholder = { Text("Contoh: One Piece") },
+                    label = {
+                        Text(if (catalogMode == "film") "Judul film atau series" else "Judul anime")
+                    },
+                    placeholder = {
+                        Text(if (catalogMode == "film") "Contoh: Night of Blood" else "Contoh: One Piece")
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = WuStroke,
@@ -142,7 +152,10 @@ fun SearchScreen(
                                 .clip(shape)
                                 .border(1.dp, WuStroke.copy(alpha = 0.5f), shape)
                                 .background(MaterialTheme.colorScheme.surface)
-                                .clickable { item.slug?.let(onOpenAnime) }
+                                .clickable {
+                                    val slug = item.slug?.takeIf { it.isNotBlank() } ?: return@clickable
+                                    onOpenTitle(item.catalog ?: catalogMode, slug)
+                                }
                                 .padding(10.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -157,9 +170,18 @@ fun SearchScreen(
                             )
                             Column {
                                 Text(item.displayTitle(), style = MaterialTheme.typography.titleSmall)
-                                item.rating?.takeIf { it.isNotBlank() }?.let {
+                                val kind = when (item.catalog) {
+                                    "horror" -> "Horor"
+                                    "series" -> "Series"
+                                    "movies" -> "Film"
+                                    else -> item.type
+                                }
+                                if (!kind.isNullOrBlank() || !item.rating.isNullOrBlank()) {
                                     Text(
-                                        "\u2605 $it",
+                                        listOfNotNull(
+                                            kind?.takeIf { it.isNotBlank() },
+                                            item.rating?.takeIf { it.isNotBlank() }?.let { "★ $it" },
+                                        ).joinToString(" · "),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.labelSmall,
                                         modifier = Modifier.padding(top = 4.dp),

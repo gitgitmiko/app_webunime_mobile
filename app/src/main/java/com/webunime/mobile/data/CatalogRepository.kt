@@ -114,14 +114,24 @@ class CatalogRepository(
         )
     }
 
-    suspend fun search(q: String, limit: Int = 30): SearchResponse = withContext(Dispatchers.IO) {
-        ensureLightFiles()
+    suspend fun search(q: String, limit: Int = 30, catalogMode: String = "anime"): SearchResponse =
+        withContext(Dispatchers.IO) {
         val query = q.trim().lowercase(Locale.ROOT)
         if (query.length < 2) {
             return@withContext SearchResponse(q = q, count = 0, items = emptyList())
         }
-        val pool = readAnimeList(FILE_INDEX).map { it.toCard() }.ifEmpty {
-            readCardList(FILE_INDEX)
+        val pool = if (catalogMode == "film") {
+            ensureFilmFiles()
+            buildList {
+                addAll(readAnimeList(FILE_LK_MOVIES, filmCacheDir).map { it.toCard("movies") })
+                addAll(readAnimeList(FILE_HORROR, filmCacheDir).map { it.toCard("horror") })
+                addAll(readAnimeList(FILE_SERIES_INDEX, filmCacheDir).map { it.toCard("series") })
+            }
+        } else {
+            ensureLightFiles()
+            readAnimeList(FILE_INDEX).map { it.toCard("anime") }.ifEmpty {
+                readCardList(FILE_INDEX).map { it.copy(catalog = "anime") }
+            } + readAnimeList(FILE_MOVIES).map { it.toCard("anime") }
         }
         val items = pool
             .asSequence()
@@ -131,6 +141,7 @@ class CatalogRepository(
                     .lowercase(Locale.ROOT)
                 hay.contains(query)
             }
+            .distinctBy { "${it.catalog}:${it.slug?.lowercase(Locale.ROOT)}" }
             .take(limit.coerceIn(1, 100))
             .toList()
         SearchResponse(q = q, count = items.size, items = items)

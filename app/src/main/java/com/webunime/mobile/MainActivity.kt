@@ -24,7 +24,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ import androidx.navigation.navArgument
 import com.webunime.mobile.ui.account.AccountScreen
 import com.webunime.mobile.ui.calendar.CalendarScreen
 import com.webunime.mobile.ui.detail.DetailScreen
+import com.webunime.mobile.ui.home.CatalogChooserScreen
 import com.webunime.mobile.ui.home.HomeScreen
 import com.webunime.mobile.ui.search.SearchScreen
 import com.webunime.mobile.ui.theme.WebunimeTheme
@@ -52,8 +55,22 @@ class MainActivity : ComponentActivity() {
                 val nav = rememberNavController()
                 val backStack by nav.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route.orEmpty()
-                val showBottom = route in setOf("home", "search", "calendar", "settings")
+                var catalogMode by rememberSaveable { mutableStateOf<String?>(null) }
+                val showBottom = catalogMode != null &&
+                    route in setOf("home", "search", "calendar", "settings")
                 var updateCheckTrigger by remember { mutableIntStateOf(0) }
+
+                fun openTitle(collection: String, slug: String, episode: Int = -1) {
+                    nav.navigate("detail/$collection/$slug?ep=$episode")
+                }
+
+                fun goChoose() {
+                    catalogMode = null
+                    nav.navigate("choose") {
+                        popUpTo("choose") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
 
                 AppUpdateHost(autoCheck = true, checkTrigger = updateCheckTrigger)
 
@@ -97,15 +114,17 @@ class MainActivity : ComponentActivity() {
                                     label = { Text("Cari") },
                                     colors = colors,
                                 )
-                                NavigationBarItem(
-                                    selected = route == "calendar",
-                                    onClick = {
-                                        nav.navigate("calendar") { launchSingleTop = true }
-                                    },
-                                    icon = { Icon(Icons.Default.CalendarMonth, null) },
-                                    label = { Text("Jadwal") },
-                                    colors = colors,
-                                )
+                                if (catalogMode == "anime") {
+                                    NavigationBarItem(
+                                        selected = route == "calendar",
+                                        onClick = {
+                                            nav.navigate("calendar") { launchSingleTop = true }
+                                        },
+                                        icon = { Icon(Icons.Default.CalendarMonth, null) },
+                                        label = { Text("Jadwal") },
+                                        colors = colors,
+                                    )
+                                }
                                 NavigationBarItem(
                                     selected = route == "settings",
                                     onClick = {
@@ -121,25 +140,41 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     NavHost(
                         navController = nav,
-                        startDestination = "home",
+                        startDestination = "choose",
                         modifier = Modifier.padding(padding),
                     ) {
+                        composable("choose") {
+                            CatalogChooserScreen(
+                                onPick = { picked ->
+                                    catalogMode = picked
+                                    nav.navigate("home") {
+                                        popUpTo("choose") { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                },
+                            )
+                        }
                         composable("home") {
                             HomeScreen(
-                                onOpenAnime = { slug -> nav.navigate("detail/$slug") },
+                                catalogMode = catalogMode ?: "anime",
+                                onOpenAnime = { slug -> openTitle("anime", slug) },
                                 onOpenTitle = { collection, slug, episode ->
-                                    nav.navigate("detail/$collection/$slug?ep=$episode")
+                                    openTitle(collection, slug, episode)
                                 },
+                                onChangeCatalog = { goChoose() },
                             )
                         }
                         composable("search") {
                             SearchScreen(
-                                onOpenAnime = { slug -> nav.navigate("detail/$slug") },
+                                catalogMode = catalogMode ?: "anime",
+                                onOpenTitle = { collection, slug ->
+                                    openTitle(collection, slug)
+                                },
                             )
                         }
                         composable("calendar") {
                             CalendarScreen(
-                                onOpenAnime = { slug -> nav.navigate("detail/$slug") },
+                                onOpenAnime = { slug -> openTitle("anime", slug) },
                             )
                         }
                         composable("settings") {
@@ -165,16 +200,6 @@ class MainActivity : ComponentActivity() {
                                 slug = slug,
                                 collection = collection,
                                 initialEpisode = episode,
-                                onBack = { nav.popBackStack() },
-                            )
-                        }
-                        composable(
-                            route = "detail/{slug}",
-                            arguments = listOf(navArgument("slug") { type = NavType.StringType }),
-                        ) { entry ->
-                            val slug = entry.arguments?.getString("slug").orEmpty()
-                            DetailScreen(
-                                slug = slug,
                                 onBack = { nav.popBackStack() },
                             )
                         }

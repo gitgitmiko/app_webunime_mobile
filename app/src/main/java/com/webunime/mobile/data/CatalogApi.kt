@@ -19,8 +19,8 @@ class CatalogApi(
 
     suspend fun filmHome(): FilmHome = repo.filmHome()
 
-    suspend fun search(q: String, limit: Int = 30): SearchResponse =
-        repo.search(q, limit)
+    suspend fun search(q: String, limit: Int = 30, catalogMode: String = "anime"): SearchResponse =
+        repo.search(q, limit, catalogMode)
 
     suspend fun calendar(): CalendarResponse = repo.calendar()
 

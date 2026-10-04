@@ -208,7 +208,10 @@ fun <T> HorizontalPosterRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        itemsIndexed(items) { _, item ->
+        itemsIndexed(
+            items = items,
+            key = { index, item -> "${index}|${titleOf(item)}|${thumbOf(item).orEmpty()}" },
+        ) { _, item ->
             PosterCard(
                 title = titleOf(item),
                 thumbnail = thumbOf(item),
