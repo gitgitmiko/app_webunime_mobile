@@ -2,26 +2,79 @@ package com.webunime.mobile.data
 
 object PlayerRouter {
 
-    fun preferred(players: List<PlayerServer>): List<PlayerServer> {
+    private val filmPrefer = listOf("turbovip", "hydrax", "cast")
+
+    fun preferred(players: List<PlayerServer>, film: Boolean = false): List<PlayerServer> {
         val raw = players.filter { !it.url.isNullOrBlank() }
         if (raw.isEmpty()) return emptyList()
-        return rankAnime(raw)
+        return if (film) rankFilm(raw) else rankAnime(raw)
     }
 
-    fun pickDefault(players: List<PlayerServer>): PlayerServer? =
-        preferred(players).firstOrNull()
+    fun pickDefault(players: List<PlayerServer>, film: Boolean = false): PlayerServer? =
+        preferred(players, film).firstOrNull()
 
     fun isDirectMedia(url: String): Boolean {
         val u = url.lowercase()
-        if (u.contains("abyssplayer") || u.contains("gn1r5n") ||
-            u.contains("turbo") || u.contains("emturbovid") || u.contains("blogger.com") ||
-            u.contains("mega.nz") || u.contains("filedon.co/embed") ||
-            u.contains("api.wibufile.com/embed") || u.contains("login.wibufile.com")
+        if (u.contains("/iframe3/") ||
+            u.contains("videonode.") ||
+            u.contains("playeriframe") ||
+            u.contains("abyssplayer") ||
+            u.contains("short.icu") ||
+            u.contains("iamcdn") ||
+            u.contains("gn1r5n") ||
+            u.contains("turbo") ||
+            u.contains("emturbovid") ||
+            u.contains("playcdn") ||
+            u.contains("p2pplay") ||
+            u.contains("blogger.com") ||
+            u.contains("mega.nz") ||
+            u.contains("filedon.co/embed") ||
+            u.contains("api.wibufile.com/embed") ||
+            u.contains("login.wibufile.com")
         ) {
             return false
         }
         return u.contains(".mp4") || u.contains(".m3u8") || u.contains(".webm") ||
             u.contains("wibufile.com/video")
+    }
+
+    private fun rankFilm(raw: List<PlayerServer>): List<PlayerServer> {
+        val ranked = filmPrefer.mapNotNull { key ->
+            raw.firstOrNull { p -> matchesFilmKey(p, key) }
+        }
+        val rest = raw.filter { p ->
+            ranked.none { it.url == p.url } && !isP2p(p)
+        }
+        val p2p = raw.filter { isP2p(it) }
+        return (ranked + rest + p2p).distinctBy { it.url }
+    }
+
+    private fun matchesFilmKey(p: PlayerServer, key: String): Boolean {
+        val s = (p.server ?: "").lowercase()
+        val l = (p.label ?: "").lowercase()
+        val u = (p.url ?: "").lowercase()
+        return when (key) {
+            "turbovip" ->
+                s.contains("turbo") || l.contains("turbo") ||
+                    u.contains("turbo") || u.contains("emturbovid")
+            "hydrax" ->
+                s.contains("hydrax") || l.contains("hydrax") ||
+                    u.contains("abyss") || u.contains("/iframe/hydrax") ||
+                    u.contains("/iframe3/hydrax")
+            "cast" ->
+                s.contains("cast") || l.contains("cast") ||
+                    u.contains("gn1r5n") || u.contains("/iframe/cast") ||
+                    u.contains("/iframe3/cast")
+            else -> s.contains(key) || l.contains(key) || u.contains(key)
+        }
+    }
+
+    private fun isP2p(p: PlayerServer): Boolean {
+        val s = (p.server ?: "").lowercase()
+        val l = (p.label ?: "").lowercase()
+        val u = (p.url ?: "").lowercase()
+        return s.contains("p2p") || l.contains("p2p") ||
+            u.contains("p2pplay") || u.contains("playcdn") || u.contains("/iframe3/p2p")
     }
 
     private fun rankAnime(raw: List<PlayerServer>): List<PlayerServer> {

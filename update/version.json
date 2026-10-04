@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "0.3.3",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.3/Weeboonime-v0.3.3.apk",
-  "changelog": "Pilih Anime atau Film sebelum beranda. Tab Film: Home, Cari, Settings. Cari juga untuk film. Kartu anime tidak load ulang saat scroll."
+  "versionCode": 7,
+  "versionName": "0.3.4",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.4/Weeboonime-v0.3.4.apk",
+  "changelog": "Pemutar film: Hydrax dan TurboVIP memakai bootstrap iframe3 + wrapper seperti app TV."
 }

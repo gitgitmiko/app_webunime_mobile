@@ -7,7 +7,11 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -67,9 +71,11 @@ import androidx.media3.ui.PlayerView
 import com.webunime.mobile.WebunimeApp
 import com.webunime.mobile.data.AnimeDetail
 import com.webunime.mobile.data.EmbedPlayback
+import com.webunime.mobile.data.FilmEmbed
 import com.webunime.mobile.data.EpisodeSummary
 import com.webunime.mobile.data.PlayerRouter
 import com.webunime.mobile.data.PlayerServer
+import com.webunime.mobile.data.WebPlayerProxy
 import com.webunime.mobile.ui.components.MetaChip
 import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.components.SimpleDropdown
@@ -129,7 +135,12 @@ class PlayerActivity : ComponentActivity() {
                             epTitle = payload.episode?.title
                                 ?: payload.judul
                                 ?: animeTitle
-                            players = PlayerRouter.preferred(payload.episode?.players.orEmpty())
+                            players = PlayerRouter.preferred(
+                                payload.episode?.players.orEmpty(),
+                                film = collection == "movies" ||
+                                    collection == "horror" ||
+                                    collection == "series",
+                            )
                             selectedServer = 0
                             if (players.isEmpty()) error = "Tidak ada server player"
                         }
@@ -407,14 +418,12 @@ private fun PlaybackSurface(url: String) {
     var resolving by remember { mutableStateOf(EmbedPlayback.isWibufileEmbed(url)) }
 
     LaunchedEffect(url) {
-        if (url == playUrl && !resolving) return@LaunchedEffect
         resolving = EmbedPlayback.isWibufileEmbed(url)
-        playUrl = url
+        val mapped = FilmEmbed.mapLegacyIframe(url)
+        playUrl = mapped ?: url
         if (EmbedPlayback.isWibufileEmbed(url)) {
             val mp4 = EmbedPlayback.resolveDirectMedia(url)
-            if (!mp4.isNullOrBlank()) {
-                playUrl = mp4
-            }
+            if (!mp4.isNullOrBlank()) playUrl = mp4
             resolving = false
         } else {
             resolving = false
@@ -439,7 +448,6 @@ private fun PlaybackSurface(url: String) {
                 it.repeatMode = Player.REPEAT_MODE_OFF
             }
         }
-        // Ganti media hanya saat URL berubah — jangan recreate player saat rotate.
         LaunchedEffect(playUrl) {
             val current = player.currentMediaItem?.localConfiguration?.uri?.toString()
             if (current == playUrl) return@LaunchedEffect
@@ -467,6 +475,7 @@ private fun PlaybackSurface(url: String) {
             modifier = Modifier.fillMaxSize(),
         )
     } else {
+        val activity = context as? android.app.Activity
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -481,8 +490,26 @@ private fun PlaybackSurface(url: String) {
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
+                    settings.userAgentString =
+                        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     webChromeClient = WebChromeClient()
-                    webViewClient = WebViewClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView,
+                            request: WebResourceRequest,
+                        ): WebResourceResponse? = WebPlayerProxy.intercept(request)
+                    }
+                    addJavascriptInterface(
+                        FilmPlaybackBridge { next ->
+                            activity?.runOnUiThread {
+                                if (next.isBlank()) return@runOnUiThread
+                                playUrl = next
+                            }
+                        },
+                        "WebunimePlayback",
+                    )
                     tag = ""
                 }
             },
@@ -490,21 +517,57 @@ private fun PlaybackSurface(url: String) {
                 val loaded = webView.tag as? String
                 if (loaded == playUrl) return@AndroidView
                 webView.tag = playUrl
-                if (useIframe) {
-                    webView.loadDataWithBaseURL(
-                        EmbedPlayback.wrapperBaseUrl(playUrl),
-                        EmbedPlayback.iframeWrapperHtml(playUrl),
-                        "text/html",
-                        "utf-8",
-                        null,
-                    )
-                } else {
-                    val headers = mutableMapOf<String, String>()
-                    if (playUrl.contains("wibufile", ignoreCase = true)) {
-                        headers["Referer"] = "https://api.wibufile.com/"
+                when {
+                    FilmEmbed.isIframe3(playUrl) -> {
+                        val parsed = FilmEmbed.parseIframe3(playUrl)
+                        if (parsed == null) {
+                            webView.loadUrl(playUrl)
+                        } else {
+                            val (host, id) = parsed
+                            webView.loadDataWithBaseURL(
+                                FilmEmbed.wrapperOrigin(playUrl),
+                                FilmEmbed.iframe3BootstrapHtml(host, id),
+                                "text/html",
+                                "utf-8",
+                                null,
+                            )
+                        }
                     }
-                    if (headers.isEmpty()) webView.loadUrl(playUrl)
-                    else webView.loadUrl(playUrl, headers)
+                    WebPlayerProxy.isAbyss(playUrl) -> {
+                        webView.loadDataWithBaseURL(
+                            WebPlayerProxy.ABYSS_WRAPPER_BASE,
+                            WebPlayerProxy.abyssWrapperHtml(playUrl),
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
+                    }
+                    WebPlayerProxy.isTurbo(playUrl) -> {
+                        webView.loadDataWithBaseURL(
+                            WebPlayerProxy.ABYSS_WRAPPER_BASE,
+                            WebPlayerProxy.turboWrapperHtml(playUrl),
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
+                    }
+                    useIframe -> {
+                        webView.loadDataWithBaseURL(
+                            EmbedPlayback.wrapperBaseUrl(playUrl),
+                            EmbedPlayback.iframeWrapperHtml(playUrl),
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
+                    }
+                    else -> {
+                        val headers = mutableMapOf<String, String>()
+                        if (playUrl.contains("wibufile", ignoreCase = true)) {
+                            headers["Referer"] = "https://api.wibufile.com/"
+                        }
+                        if (headers.isEmpty()) webView.loadUrl(playUrl)
+                        else webView.loadUrl(playUrl, headers)
+                    }
                 }
             },
             onRelease = { webView ->
@@ -514,4 +577,28 @@ private fun PlaybackSurface(url: String) {
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
+
+private class FilmPlaybackBridge(
+    private val onEmbed: (String) -> Unit,
+) {
+    @JavascriptInterface
+    fun onResolvedEmbed(embedUrl: String) {
+        onEmbed(embedUrl.trim())
+    }
+
+    @JavascriptInterface
+    fun onQualities(json: String) { }
+
+    @JavascriptInterface
+    fun onProgress(position: Double, duration: Double) { }
+
+    @JavascriptInterface
+    fun onPlay() { }
+
+    @JavascriptInterface
+    fun onPause() { }
+
+    @JavascriptInterface
+    fun onEnded() { }
 }
