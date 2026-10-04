@@ -238,6 +238,7 @@ ${wrapperIframeBridgeJs()}
           window.__wuPlay = function(){ __wuPost("__wuPlay"); };
           window.__wuPause = function(){ __wuPost("__wuPause"); };
           window.__wuToggle = function(){ __wuPost("__wuToggle"); };
+          window.__wuMuteToggle = function(){ __wuPost("__wuMuteToggle"); };
           // Kick autoplay: ulang sampai frame anak melapor playing.
           (function autoKick(){
             var n = 0;
@@ -350,9 +351,6 @@ ${wrapperIframeBridgeJs()}
         val url = request.url.toString()
         if (!url.startsWith("http")) return null
         if (isAdRequest(url)) return blockedResponse()
-        // Hydrax/abyss: HTML+HLS harus Chromium murni. OkHttp+MSE di WebView HP
-        // sering audio-only (layar hitam).
-        if (isAbyss(url)) return null
         if (!isManaged(url)) return null
         // Segmen media (1080p ~beberapa MB) jangan lewat OkHttp:
         // shouldInterceptRequest serial + tanpa Content-Length → buffer underrun / ngadat.
@@ -422,8 +420,8 @@ ${wrapperIframeBridgeJs()}
     private fun isHeavyMedia(url: String, request: WebResourceRequest): Boolean {
         val u = url.lowercase()
         if (heavyMediaPath.containsMatchIn(u)) return true
-        if (u.contains(".m3u8")) return true
-        val isPlaylistOrPage = u.contains(".html") ||
+        val isPlaylistOrPage = u.contains(".m3u8") ||
+            u.contains(".html") ||
             u.contains(".js") ||
             u.contains(".css") ||
             u.contains(".json") ||
@@ -667,6 +665,14 @@ ${wrapperIframeBridgeJs()}
   };
   window.__wuPause=function(){ window.__wuUserPaused=true; try{var jp=__wuJw(); if(jp) jp.pause();}catch(e){} try{var v=__wuVideo(); if(v) v.pause();}catch(e){} try{ if(typeof window.__wuShowPlayerUi==="function") window.__wuShowPlayerUi(); }catch(e){} try{ if(window.parent&&window.parent!==window){ window.parent.postMessage({type:"__wuPlayState",playing:false},"*"); }else{ WebunimePlayback.onPause(); } }catch(e){} };
   window.__wuToggle=function(){ if(__wuIsPlaying()) window.__wuPause(); else window.__wuPlay(); };
+  window.__wuMuteToggle=function(){
+    try{
+      var v=__wuVideo();
+      if(v) v.muted=!v.muted;
+      var jp=__wuJw();
+      if(jp&&typeof jp.setMute==="function") jp.setMute(!!(v&&v.muted));
+    }catch(e){}
+  };
   // Frame anak (Turbo/Hydrax iframe): bridge ke parent — @JavascriptInterface tidak lintas-origin.
   function __wuNotifyEnded(){
     try{
@@ -754,7 +760,7 @@ ${wrapperIframeBridgeJs()}
     }catch(e){}
     return {p:0,d:0};
   };
-  try{ window.addEventListener("message", function(e){ var d=e&&e.data; if(d==="__wuToggle") window.__wuToggle(); else if(d==="__wuPlay") window.__wuPlay(); else if(d==="__wuPause") window.__wuPause(); else if(d==="__wuGetQualities"){ try{window.__wuReportQualities();}catch(ex){} } else if(d==="__wuShowUi"){ try{ if(typeof window.__wuShowPlayerUi==="function") window.__wuShowPlayerUi(); }catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSetQuality"){ try{window.__wuSetQuality(d.index);}catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSeekBy"){ try{window.__wuSeekBy(d.delta);}catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSeekTo"){ try{window.__wuSeekTo(d.time);}catch(ex){} } }); }catch(e){}
+  try{ window.addEventListener("message", function(e){ var d=e&&e.data; if(d==="__wuToggle") window.__wuToggle(); else if(d==="__wuPlay") window.__wuPlay(); else if(d==="__wuPause") window.__wuPause(); else if(d==="__wuMuteToggle") window.__wuMuteToggle(); else if(d==="__wuGetQualities"){ try{window.__wuReportQualities();}catch(ex){} } else if(d==="__wuShowUi"){ try{ if(typeof window.__wuShowPlayerUi==="function") window.__wuShowPlayerUi(); }catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSetQuality"){ try{window.__wuSetQuality(d.index);}catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSeekBy"){ try{window.__wuSeekBy(d.delta);}catch(ex){} } else if(d&&typeof d==="object"&&d.type==="__wuSeekTo"){ try{window.__wuSeekTo(d.time);}catch(ex){} } }); }catch(e){}
 
   // ---- Kualitas / resolusi (JWPlayer) untuk remote TV ----
   function __wuJwAny(){
@@ -920,7 +926,7 @@ ${wrapperIframeBridgeJs()}
       Object.defineProperty(window,"fuckAdBlock",{configurable:true,get:function(){return {onDetected:function(){},onNotDetected:function(cb){try{cb&&cb();}catch(e){}}};},set:function(){}});
       Object.defineProperty(window,"FuckAdBlock",{configurable:true,get:function(){return function(){};},set:function(){}});
     } catch(e){}
-    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.controls=true; cfg.displaytitle=false; cfg.bufferLength=24; cfg.preload="auto"; cfg.hlshtml=false; cfg.androidhls=true; if(false){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
+    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.controls=true; cfg.displaytitle=false; cfg.bufferLength=24; cfg.preload="auto"; if(mse){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
     var tries=0; var iv=setInterval(function(){ tries++; try { if(window.abyssConfig) window.abyssConfig.popups=[]; var overlay=document.getElementById("overlay"); if(overlay && tries===6 && !window.__wuUserPaused){ try{overlay.click();}catch(e){} } var st=""; try{ if(typeof window.jwplayer==="function") st=window.jwplayer().getState()||""; }catch(e){} var filling=st==="playing"||st==="buffering"; if(!filling && !window.__wuUserPaused && tries%4===1){ try{ window.__wuPlay(); }catch(e){} } if(st==="playing"||__wuIsPlaying()){ clearInterval(iv); return; } if(st==="buffering"&&tries>6){ clearInterval(iv); return; } } catch(e){} if(tries>40) clearInterval(iv); }, 250);
   }
 

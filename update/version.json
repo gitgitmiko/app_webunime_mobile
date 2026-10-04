@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.3.7",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.7/Weeboonime-v0.3.7.apk",
-  "changelog": "Hydrax: video tampil di HP (HLS native, tanpa intercept MSE yang bikin layar hitam)."
+  "versionCode": 11,
+  "versionName": "0.3.8",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.8/Weeboonime-v0.3.8.apk",
+  "changelog": "Hydrax/TurboVIP/P2P: player kembali jalan + kontrol native app (play, jeda, ±10 dtk, mute)."
 }

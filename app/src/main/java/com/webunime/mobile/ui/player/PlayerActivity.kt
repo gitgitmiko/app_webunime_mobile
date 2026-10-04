@@ -32,13 +32,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -482,6 +490,21 @@ private fun PlaybackSurface(url: String) {
         )
     } else {
         val activity = context as? android.app.Activity
+        var webViewRef by remember { mutableStateOf<WebView?>(null) }
+        var playing by remember { mutableStateOf(true) }
+        var muted by remember { mutableStateOf(false) }
+        val filmWeb = remember(playUrl) {
+            WebPlayerProxy.isAbyss(playUrl) ||
+                WebPlayerProxy.isTurbo(playUrl) ||
+                WebPlayerProxy.isP2p(playUrl) ||
+                FilmEmbed.isIframe3(playUrl)
+        }
+        val playUrlState = rememberUpdatedState(playUrl)
+        fun runPlayerJs(code: String) {
+            webViewRef?.evaluateJavascript(code, null)
+        }
+
+        Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -498,7 +521,7 @@ private fun PlaybackSurface(url: String) {
                     settings.useWideViewPort = true
                     settings.userAgentString =
                         "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                    setLayerType(View.LAYER_TYPE_NONE, null)
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     webChromeClient = object : WebChromeClient() {
@@ -530,30 +553,41 @@ private fun PlaybackSurface(url: String) {
                         ): WebResourceResponse? = WebPlayerProxy.intercept(request)
                     }
                     addJavascriptInterface(
-                        FilmPlaybackBridge { next ->
-                            activity?.runOnUiThread {
-                                if (next.isBlank()) return@runOnUiThread
-                                playUrl = next
-                            }
-                        },
+                        FilmPlaybackBridge(
+                            onEmbed = { next ->
+                                activity?.runOnUiThread {
+                                    if (next.isBlank()) return@runOnUiThread
+                                    playUrl = next
+                                }
+                            },
+                            notifyPlay = {
+                                activity?.runOnUiThread { playing = true }
+                            },
+                            notifyPause = {
+                                activity?.runOnUiThread { playing = false }
+                            },
+                        ),
                         "WebunimePlayback",
                     )
                     tag = ""
+                    webViewRef = this
                 }
             },
             update = { webView ->
+                webViewRef = webView
                 val loaded = webView.tag as? String
-                if (loaded == playUrl) return@AndroidView
-                webView.tag = playUrl
+                if (loaded == playUrlState.value) return@AndroidView
+                webView.tag = playUrlState.value
+                val current = playUrlState.value
                 when {
-                    FilmEmbed.isIframe3(playUrl) -> {
-                        val parsed = FilmEmbed.parseIframe3(playUrl)
+                    FilmEmbed.isIframe3(current) -> {
+                        val parsed = FilmEmbed.parseIframe3(current)
                         if (parsed == null) {
-                            webView.loadUrl(playUrl)
+                            webView.loadUrl(current)
                         } else {
                             val (host, id) = parsed
                             webView.loadDataWithBaseURL(
-                                FilmEmbed.wrapperOrigin(playUrl),
+                                FilmEmbed.wrapperOrigin(current),
                                 FilmEmbed.iframe3BootstrapHtml(host, id),
                                 "text/html",
                                 "utf-8",
@@ -561,28 +595,28 @@ private fun PlaybackSurface(url: String) {
                             )
                         }
                     }
-                    WebPlayerProxy.isAbyss(playUrl) -> {
+                    WebPlayerProxy.isAbyss(current) -> {
                         webView.loadDataWithBaseURL(
                             WebPlayerProxy.ABYSS_WRAPPER_BASE,
-                            WebPlayerProxy.abyssWrapperHtml(playUrl),
+                            WebPlayerProxy.abyssWrapperHtml(current),
                             "text/html",
                             "utf-8",
                             null,
                         )
                     }
-                    WebPlayerProxy.isTurbo(playUrl) -> {
+                    WebPlayerProxy.isTurbo(current) -> {
                         webView.loadDataWithBaseURL(
                             WebPlayerProxy.ABYSS_WRAPPER_BASE,
-                            WebPlayerProxy.turboWrapperHtml(playUrl),
+                            WebPlayerProxy.turboWrapperHtml(current),
                             "text/html",
                             "utf-8",
                             null,
                         )
                     }
-                    WebPlayerProxy.isP2p(playUrl) -> {
+                    WebPlayerProxy.isP2p(current) -> {
                         webView.loadDataWithBaseURL(
                             WebPlayerProxy.VIDEONODE_WRAPPER_BASE,
-                            WebPlayerProxy.turboWrapperHtml(playUrl),
+                            WebPlayerProxy.turboWrapperHtml(current),
                             "text/html",
                             "utf-8",
                             null,
@@ -590,8 +624,8 @@ private fun PlaybackSurface(url: String) {
                     }
                     useIframe -> {
                         webView.loadDataWithBaseURL(
-                            EmbedPlayback.wrapperBaseUrl(playUrl),
-                            EmbedPlayback.iframeWrapperHtml(playUrl),
+                            EmbedPlayback.wrapperBaseUrl(current),
+                            EmbedPlayback.iframeWrapperHtml(current),
                             "text/html",
                             "utf-8",
                             null,
@@ -599,25 +633,94 @@ private fun PlaybackSurface(url: String) {
                     }
                     else -> {
                         val headers = mutableMapOf<String, String>()
-                        if (playUrl.contains("wibufile", ignoreCase = true)) {
+                        if (current.contains("wibufile", ignoreCase = true)) {
                             headers["Referer"] = "https://api.wibufile.com/"
                         }
-                        if (headers.isEmpty()) webView.loadUrl(playUrl)
-                        else webView.loadUrl(playUrl, headers)
+                        if (headers.isEmpty()) webView.loadUrl(current)
+                        else webView.loadUrl(current, headers)
                     }
                 }
             },
             onRelease = { webView ->
+                webViewRef = null
                 webView.stopLoading()
                 webView.destroy()
             },
             modifier = Modifier.fillMaxSize(),
         )
+        if (filmWeb) {
+            FilmNativeControls(
+                playing = playing,
+                muted = muted,
+                onPlayPause = {
+                    if (playing) runPlayerJs("try{window.__wuPause&&window.__wuPause()}catch(e){}")
+                    else runPlayerJs("try{window.__wuPlay&&window.__wuPlay()}catch(e){}")
+                    playing = !playing
+                },
+                onSeekBack = {
+                    runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(-10)}catch(e){}")
+                },
+                onSeekForward = {
+                    runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(10)}catch(e){}")
+                },
+                onMute = {
+                    muted = !muted
+                    runPlayerJs("try{window.__wuMuteToggle&&window.__wuMuteToggle()}catch(e){}")
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
+        }
+        }
+    }
+}
+
+@Composable
+private fun FilmNativeControls(
+    playing: Boolean,
+    muted: Boolean,
+    onPlayPause: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
+    onMute: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onSeekBack) {
+            Icon(Icons.Default.Replay10, "Mundur 10 detik", tint = Color.White)
+        }
+        IconButton(onClick = onPlayPause) {
+            Icon(
+                if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                if (playing) "Jeda" else "Putar",
+                tint = Color.White,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        IconButton(onClick = onSeekForward) {
+            Icon(Icons.Default.Forward10, "Maju 10 detik", tint = Color.White)
+        }
+        IconButton(onClick = onMute) {
+            Icon(
+                if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                if (muted) "Unmute" else "Mute",
+                tint = Color.White,
+            )
+        }
     }
 }
 
 private class FilmPlaybackBridge(
     private val onEmbed: (String) -> Unit,
+    private val notifyPlay: () -> Unit = {},
+    private val notifyPause: () -> Unit = {},
 ) {
     @JavascriptInterface
     fun onResolvedEmbed(embedUrl: String) {
@@ -631,10 +734,10 @@ private class FilmPlaybackBridge(
     fun onProgress(position: Double, duration: Double) { }
 
     @JavascriptInterface
-    fun onPlay() { }
+    fun onPlay() { notifyPlay() }
 
     @JavascriptInterface
-    fun onPause() { }
+    fun onPause() { notifyPause() }
 
     @JavascriptInterface
     fun onEnded() { }
