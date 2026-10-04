@@ -23,6 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -48,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.webunime.mobile.WebunimeApp
@@ -59,6 +66,7 @@ import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.components.SimpleDropdown
 import com.webunime.mobile.ui.player.PlayerActivity
 import com.webunime.mobile.ui.theme.Appear
+import com.webunime.mobile.ui.theme.WuAccent
 import com.webunime.mobile.ui.theme.WuBg
 import com.webunime.mobile.ui.theme.WuStroke
 import com.webunime.mobile.ui.theme.WuSurface
@@ -227,8 +235,11 @@ fun DetailScreen(
                                             data.type?.takeIf { it.isNotBlank() }?.let {
                                                 MetaChip(it)
                                             }
-                                            data.episodes_count?.let {
-                                                MetaChip("$it episode")
+                                            val isMovie = collection == "movies" || collection == "horror"
+                                            if (!isMovie) {
+                                                data.episodes_count?.let {
+                                                    MetaChip("$it episode")
+                                                }
                                             }
                                         }
                                         data.genre?.takeIf { it.isNotEmpty() }?.let { genres ->
@@ -273,11 +284,49 @@ fun DetailScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     if (isMovie && data.episodes.isNotEmpty()) {
-                                        TextButton(
-                                            onClick = {
-                                                openPlayer(slug, data.episodes.first().episode ?: 1, data.displayTitle())
-                                            },
-                                        ) { Text("Putar") }
+                                        Box(Modifier.fillMaxWidth()) {
+                                            Button(
+                                                onClick = {
+                                                    openPlayer(
+                                                        slug,
+                                                        data.episodes.first().episode ?: 1,
+                                                        data.displayTitle(),
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(52.dp),
+                                                shape = MaterialTheme.shapes.medium,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = WuAccent,
+                                                    contentColor = Color.White,
+                                                ),
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PlayArrow,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(22.dp),
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    "Putar film",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                )
+                                            }
+                                            Badge(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(top = 6.dp, end = 10.dp),
+                                                containerColor = Color.White,
+                                                contentColor = WuAccent,
+                                            ) {
+                                                Text(
+                                                    "HD",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
+                                        }
                                     }
 
                                     val groups = seasons.ifEmpty {

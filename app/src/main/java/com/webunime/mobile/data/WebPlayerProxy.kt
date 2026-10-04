@@ -81,6 +81,11 @@ object WebPlayerProxy {
         return h.contains("turbo") || h.contains("emturbo")
     }
 
+    fun isP2p(url: String): Boolean {
+        val h = hostOf(url)
+        return h.contains("playcdn") || h.contains("p2pplay")
+    }
+
     /**
      * Wrapper HTML agar Hydrax berjalan di dalam iframe (bukan dokumen top).
      * Script bridge: iframe lintas-origin tidak bisa memanggil @JavascriptInterface
@@ -655,7 +660,7 @@ ${wrapperIframeBridgeJs()}
     __wuForceVideoPlay();
     // Jangan laporkan onPlay di sini — hanya event play/playing asli,
     // supaya kick autoplay parent tidak berhenti terlalu dini.
-    try{ if(typeof window.__wuHidePlayerUi==="function") setTimeout(window.__wuHidePlayerUi, 1200); }catch(e){}
+    try{ if(typeof window.__wuShowPlayerUi==="function") setTimeout(window.__wuShowPlayerUi, 1200); }catch(e){}
   };
   window.__wuPause=function(){ window.__wuUserPaused=true; try{var jp=__wuJw(); if(jp) jp.pause();}catch(e){} try{var v=__wuVideo(); if(v) v.pause();}catch(e){} try{ if(typeof window.__wuShowPlayerUi==="function") window.__wuShowPlayerUi(); }catch(e){} try{ if(window.parent&&window.parent!==window){ window.parent.postMessage({type:"__wuPlayState",playing:false},"*"); }else{ WebunimePlayback.onPause(); } }catch(e){} };
   window.__wuToggle=function(){ if(__wuIsPlaying()) window.__wuPause(); else window.__wuPlay(); };
@@ -861,10 +866,8 @@ ${wrapperIframeBridgeJs()}
     }catch(e){}
     if(n>2400) clearInterval(sv);
   }, 900); })();
-  // TV: sembunyikan tombol play besar / poster JWPlayer yang menutupi layar
-  // HANYA saat video benar-benar sedang diputar. Saat pause dibiarkan tampil
-  // sebagai indikator. Kontrol play/pause tetap lewat tombol OK.
-  (function(){ var c=0; var hv=setInterval(function(){ c++; try{ var v=__wuVideo(); if(v && !v.paused && v.readyState>=2){ var sel=[".jw-display",".jw-display-icon-container",".jw-display-icon-display",".jw-preview","#overlay",".vjs-big-play-button"]; for(var i=0;i<sel.length;i++){ var els=document.querySelectorAll(sel[i]); for(var j=0;j<els.length;j++){ try{els[j].style.setProperty("display","none","important");}catch(e){} } } } }catch(e){} if(c>240) clearInterval(hv); }, 400); })();
+  // HP: biarkan tombol play besar Hydrax; overlay iklan tetap dibuang.
+  (function(){ var c=0; var hv=setInterval(function(){ c++; try{ var o=document.getElementById("overlay"); if(o){ try{o.style.setProperty("display","none","important");}catch(e){} } }catch(e){} if(c>240) clearInterval(hv); }, 400); })();
 
   if (IS_CAST || IS_TURBO) {
     try { Object.defineProperty(Document.prototype,"referrer",{configurable:true,get:function(){return "https://playeriframe.sbs/";}}); } catch(e){}
@@ -927,7 +930,7 @@ ${wrapperIframeBridgeJs()}
       Object.defineProperty(window,"fuckAdBlock",{configurable:true,get:function(){return {onDetected:function(){},onNotDetected:function(cb){try{cb&&cb();}catch(e){}}};},set:function(){}});
       Object.defineProperty(window,"FuckAdBlock",{configurable:true,get:function(){return function(){};},set:function(){}});
     } catch(e){}
-    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.bufferLength=24; cfg.preload="auto"; if(mse){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
+    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.controls=true; cfg.displaytitle=false; cfg.bufferLength=24; cfg.preload="auto"; if(mse){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
     var tries=0; var iv=setInterval(function(){ tries++; try { if(window.abyssConfig) window.abyssConfig.popups=[]; var overlay=document.getElementById("overlay"); if(overlay && tries===6 && !window.__wuUserPaused){ try{overlay.click();}catch(e){} } var st=""; try{ if(typeof window.jwplayer==="function") st=window.jwplayer().getState()||""; }catch(e){} var filling=st==="playing"||st==="buffering"; if(!filling && !window.__wuUserPaused && tries%4===1){ try{ window.__wuPlay(); }catch(e){} } if(st==="playing"||__wuIsPlaying()){ clearInterval(iv); return; } if(st==="buffering"&&tries>6){ clearInterval(iv); return; } } catch(e){} if(tries>40) clearInterval(iv); }, 250);
   }
 
@@ -993,12 +996,10 @@ ${wrapperIframeBridgeJs()}
       try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(true); }catch(e){}
       try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){ el.style.removeProperty("display"); el.style.removeProperty("opacity"); }); }catch(e){}
       clearTimeout(window.__wuHideUiT);
-      window.__wuHideUiT=setTimeout(function(){ try{window.__wuHidePlayerUi();}catch(e){} }, 3500);
+      window.__wuHideUiT=setTimeout(function(){ try{window.__wuShowPlayerUi();}catch(e){} }, 3500);
     };
     window.__wuHidePlayerUi=function(){
-      if(window.__wuUserPaused) return;
-      try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(false); }catch(e){}
-      try{ document.querySelectorAll(".jw-controls,.jw-controlbar,.jw-display").forEach(function(el){ el.style.setProperty("display","none","important"); }); }catch(e){}
+      window.__wuShowPlayerUi();
     };
     var tt=0; var tiv=setInterval(function(){ tt++; try {
       if(typeof enablePlay!=="undefined") enablePlay="yes";
@@ -1008,8 +1009,8 @@ ${wrapperIframeBridgeJs()}
       try { if(typeof jwplayer==="function"){ var jp=jwplayer("video_player"); if(jp&&typeof jp.getState==="function"){ var st=jp.getState(); if(st&&st!=="idle") ready=true; } } } catch(e){}
       if(!ready && !window.__wuUserPaused && typeof loadPlayer==="function" && typeof urlPlay==="string" && urlPlay){ try{loadPlayer(urlPlay);}catch(e){} if(pre){ try{pre.style.display="none";}catch(e){} } }
       if(!window.__wuUserPaused){ try{ window.__wuPlay(); }catch(e){} }
-      if(__wuIsPlaying()){ if(pre) pre.style.display="none"; setTimeout(function(){try{window.__wuHidePlayerUi();}catch(e){}}, 1500); clearInterval(tiv); return; }
-      if(ready || (document.querySelector("video") && document.querySelector("video").readyState>=2)){ if(pre) pre.style.display="none"; if(!window.__wuUserPaused){ try{ if(typeof jwplayer==="function") jwplayer("video_player").play(); }catch(e){} setTimeout(function(){try{window.__wuHidePlayerUi();}catch(e){}}, 2000); } if(tt>12){ clearInterval(tiv); return; } }
+      if(__wuIsPlaying()){ if(pre) pre.style.display="none"; setTimeout(function(){try{window.__wuShowPlayerUi();}catch(e){}}, 1500); clearInterval(tiv); return; }
+      if(ready || (document.querySelector("video") && document.querySelector("video").readyState>=2)){ if(pre) pre.style.display="none"; if(!window.__wuUserPaused){ try{ if(typeof jwplayer==="function") jwplayer("video_player").play(); }catch(e){} setTimeout(function(){try{window.__wuShowPlayerUi();}catch(e){}}, 2000); } if(tt>12){ clearInterval(tiv); return; } }
       if(typeof play==="function" && tt>6 && !window.__wuUserPaused){ try{play();}catch(e){} }
     } catch(e){} if(tt>40) clearInterval(tiv); }, 500);
   }
@@ -1107,17 +1108,34 @@ ${wrapperIframeBridgeJs()}
 
   // Auto-hide kontrol JWPlayer juga untuk Hydrax saat playing
   if (IS_ABYSS) {
-    window.__wuHidePlayerUi=function(){
-      if(window.__wuUserPaused) return;
-      try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(false); }catch(e){}
-      try{ document.querySelectorAll(".jw-controls,.jw-controlbar,.jw-display").forEach(function(el){ el.style.setProperty("display","none","important"); }); }catch(e){}
-    };
+    window.__wuHidePlayerUi=function(){};
     window.__wuShowPlayerUi=function(){
       try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(true); }catch(e){}
-      clearTimeout(window.__wuHideUiT);
-      window.__wuHideUiT=setTimeout(function(){ try{window.__wuHidePlayerUi();}catch(e){} }, 3500);
+      try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){ el.style.removeProperty("display"); el.style.removeProperty("opacity"); el.style.setProperty("pointer-events","auto","important"); }); }catch(e){}
     };
   }
+  (function keepMobileControls(){
+    window.__wuHidePlayerUi=function(){};
+    try{
+      var s=document.createElement("style");
+      s.setAttribute("data-webunime-mobile-controls","1");
+      s.textContent=[
+        ".jw-controlbar,.jw-controls,.jw-display{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:40!important;}",
+        "video,.jw-media,.jw-wrapper{pointer-events:auto!important;}",
+        "#overlay{pointer-events:none!important;}"
+      ].join("");
+      (document.head||document.documentElement).appendChild(s);
+    }catch(e){}
+    var n=0;
+    var iv=setInterval(function(){
+      n++;
+      try{
+        var jp=typeof __wuJwAny==="function"?__wuJwAny():null;
+        if(jp&&typeof jp.setControls==="function") jp.setControls(true);
+      }catch(e){}
+      if(n>48) clearInterval(iv);
+    }, 400);
+  })();
 })();
 </script>
 """.trimIndent()

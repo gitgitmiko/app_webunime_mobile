@@ -148,6 +148,8 @@ class PlayerActivity : ComponentActivity() {
                     loading = false
                 }
 
+                val isMovieCatalog =
+                    collection == "movies" || collection == "horror"
                 val selectedEp = episodes.firstOrNull { it.episode == currentEpisode }
                     ?: episodes.firstOrNull()
                 val url = players.getOrNull(selectedServer)?.url.orEmpty()
@@ -229,6 +231,7 @@ class PlayerActivity : ComponentActivity() {
                             PlayerInfoPanel(
                                 animeTitle = animeTitle,
                                 animeDetail = animeDetail,
+                                hideEpisodes = isMovieCatalog,
                                 episodes = episodes,
                                 selectedEp = selectedEp,
                                 players = players,
@@ -304,6 +307,7 @@ class PlayerActivity : ComponentActivity() {
 private fun PlayerInfoPanel(
     animeTitle: String,
     animeDetail: AnimeDetail?,
+    hideEpisodes: Boolean,
     episodes: List<EpisodeSummary>,
     selectedEp: EpisodeSummary?,
     players: List<PlayerServer>,
@@ -338,8 +342,10 @@ private fun PlayerInfoPanel(
                     animeDetail?.type?.takeIf { it.isNotBlank() }?.let {
                         MetaChip(it)
                     }
-                    animeDetail?.episodes_count?.let {
-                        MetaChip("$it episode")
+                    if (!hideEpisodes) {
+                        animeDetail?.episodes_count?.let {
+                            MetaChip("$it episode")
+                        }
                     }
                 }
                 animeDetail?.genre?.takeIf { it.isNotEmpty() }?.let { genres ->
@@ -360,11 +366,11 @@ private fun PlayerInfoPanel(
                     modifier = Modifier.padding(horizontal = 0.dp),
                 )
                 Text(
-                    "Pilih episode dan server",
+                    if (hideEpisodes) "Pilih server pemutar" else "Pilih episode dan server",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (episodes.isNotEmpty()) {
+                if (!hideEpisodes && episodes.isNotEmpty()) {
                     SimpleDropdown(
                         label = "Episode",
                         options = episodes,
@@ -545,6 +551,15 @@ private fun PlaybackSurface(url: String) {
                     WebPlayerProxy.isTurbo(playUrl) -> {
                         webView.loadDataWithBaseURL(
                             WebPlayerProxy.ABYSS_WRAPPER_BASE,
+                            WebPlayerProxy.turboWrapperHtml(playUrl),
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
+                    }
+                    WebPlayerProxy.isP2p(playUrl) -> {
+                        webView.loadDataWithBaseURL(
+                            WebPlayerProxy.VIDEONODE_WRAPPER_BASE,
                             WebPlayerProxy.turboWrapperHtml(playUrl),
                             "text/html",
                             "utf-8",
