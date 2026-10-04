@@ -350,6 +350,9 @@ ${wrapperIframeBridgeJs()}
         val url = request.url.toString()
         if (!url.startsWith("http")) return null
         if (isAdRequest(url)) return blockedResponse()
+        // Hydrax/abyss: HTML+HLS harus Chromium murni. OkHttp+MSE di WebView HP
+        // sering audio-only (layar hitam).
+        if (isAbyss(url)) return null
         if (!isManaged(url)) return null
         // Segmen media (1080p ~beberapa MB) jangan lewat OkHttp:
         // shouldInterceptRequest serial + tanpa Content-Length → buffer underrun / ngadat.
@@ -419,8 +422,8 @@ ${wrapperIframeBridgeJs()}
     private fun isHeavyMedia(url: String, request: WebResourceRequest): Boolean {
         val u = url.lowercase()
         if (heavyMediaPath.containsMatchIn(u)) return true
-        val isPlaylistOrPage = u.contains(".m3u8") ||
-            u.contains(".html") ||
+        if (u.contains(".m3u8")) return true
+        val isPlaylistOrPage = u.contains(".html") ||
             u.contains(".js") ||
             u.contains(".css") ||
             u.contains(".json") ||
@@ -828,6 +831,7 @@ ${wrapperIframeBridgeJs()}
   // terlanjur diputar sebelum listener terpasang (kasus Cast auto-resume).
   (function(){ var n=0; var last=null; var jwHooked=false; var sv=setInterval(function(){ n++; var v=__wuVideo();
     if(v && !v.__wuTB){ v.__wuTB=true; try{
+      try{ v.setAttribute("playsinline",""); v.setAttribute("webkit-playsinline",""); v.playsInline=true; v.style.background="transparent"; v.style.opacity="1"; }catch(e){}
       v.addEventListener("play",function(){try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"__wuPlayState",playing:true},"*"); else WebunimePlayback.onPlay(); }catch(e){}});
       v.addEventListener("playing",function(){try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"__wuPlayState",playing:true},"*"); else WebunimePlayback.onPlay(); }catch(e){}});
       v.addEventListener("pause",function(){try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"__wuPlayState",playing:false},"*"); else WebunimePlayback.onPause(); }catch(e){}});
@@ -904,19 +908,10 @@ ${wrapperIframeBridgeJs()}
         s.setAttribute("data-webunime-abyss-css","1");
         s.textContent=[
           "html,body{margin:0!important;padding:0!important;background:#000!important;overflow:hidden!important;}",
-          "html,body,*,*:before,*:after{outline:none!important;outline-color:transparent!important;}",
-          "#player,.jwplayer,.jw-wrapper,.jw-aspect,.jw-media,.jw-preview,video,",
-          ".jw-controls,.container,#container,.player{",
-          "border:0!important;outline:0!important;box-shadow:none!important;",
-          "background:#000!important;}",
-          ".jwplayer.jw-flag-focus,.jw-flag-focus,.jwplayer:focus,*:focus{",
-          "outline:0!important;border:0!important;border-color:transparent!important;box-shadow:none!important;}",
-          /* frame putih: border putih / box-shadow terang di tepi player */
-          ".jwplayer,[class*='player'],[id*='player']{",
-          "border-color:transparent!important;}",
-          "iframe{border:0!important;outline:0!important;}",
+          "#player,.jwplayer,.jw-wrapper,.jw-aspect,.jw-controls,.container,#container,.player{",
+          "border:0!important;outline:0!important;box-shadow:none!important;}",
           ".jw-display,.jw-preview{display:none!important;opacity:0!important;pointer-events:none!important;}",
-          ".jw-media,video{width:100%!important;height:100%!important;opacity:1!important;visibility:visible!important;background:transparent!important;object-fit:contain!important;}"
+          ".jw-media,video,canvas.jw-video{opacity:1!important;visibility:visible!important;background:transparent!important;z-index:1!important;}"
         ].join("");
         (document.head||document.documentElement).appendChild(s);
       }catch(e){}
@@ -925,7 +920,7 @@ ${wrapperIframeBridgeJs()}
       Object.defineProperty(window,"fuckAdBlock",{configurable:true,get:function(){return {onDetected:function(){},onNotDetected:function(cb){try{cb&&cb();}catch(e){}}};},set:function(){}});
       Object.defineProperty(window,"FuckAdBlock",{configurable:true,get:function(){return function(){};},set:function(){}});
     } catch(e){}
-    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.controls=true; cfg.displaytitle=false; cfg.bufferLength=24; cfg.preload="auto"; if(mse){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
+    (function guardJwRemove(){ var tries=0; var iv=setInterval(function(){ tries++; try { if(typeof window.jwplayer==="function" && !window.jwplayer.__wuGuard){ var orig=window.jwplayer; function wrap(){ var p=orig.apply(this, arguments); try{ if(p&&typeof p.remove==="function") p.remove=function(){return p;}; }catch(e){} try{ if(p&&typeof p.setup==="function"&&!p.__wuSetupTuned){ p.__wuSetupTuned=true; var oldSetup=p.setup.bind(p); p.setup=function(cfg){ cfg=cfg||{}; try{ var mse=false; try{ mse=typeof window.MediaSource==="function"; }catch(e){} cfg.controls=true; cfg.displaytitle=false; cfg.bufferLength=24; cfg.preload="auto"; cfg.hlshtml=false; cfg.androidhls=true; if(false){ cfg.hlshtml=true; cfg.androidhls=false; cfg.hlsjsConfig=Object.assign({maxBufferLength:45,maxMaxBufferLength:90,backBufferLength:20,maxBufferSize:60*1000*1000,maxBufferHole:0.5,nudgeMaxRetry:12,startFragPrefetch:true,maxLoadingDelay:4}, cfg.hlsjsConfig||{}); } else { cfg.hlshtml=false; cfg.androidhls=true; } }catch(e){} return oldSetup(cfg); }; } }catch(e){} return p; } wrap.__wuGuard=true; try{ Object.keys(orig).forEach(function(k){ try{ wrap[k]=orig[k]; }catch(e){} }); }catch(e){} window.jwplayer=wrap; clearInterval(iv); } } catch(e){} if(tries>40) clearInterval(iv); }, 50); })();
     var tries=0; var iv=setInterval(function(){ tries++; try { if(window.abyssConfig) window.abyssConfig.popups=[]; var overlay=document.getElementById("overlay"); if(overlay && tries===6 && !window.__wuUserPaused){ try{overlay.click();}catch(e){} } var st=""; try{ if(typeof window.jwplayer==="function") st=window.jwplayer().getState()||""; }catch(e){} var filling=st==="playing"||st==="buffering"; if(!filling && !window.__wuUserPaused && tries%4===1){ try{ window.__wuPlay(); }catch(e){} } if(st==="playing"||__wuIsPlaying()){ clearInterval(iv); return; } if(st==="buffering"&&tries>6){ clearInterval(iv); return; } } catch(e){} if(tries>40) clearInterval(iv); }, 250);
   }
 
@@ -1117,7 +1112,7 @@ ${wrapperIframeBridgeJs()}
       s.textContent=[
         ".jw-controlbar,.jw-controls{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:50!important;}",
         ".jw-display,.jw-preview{display:none!important;opacity:0!important;pointer-events:none!important;}",
-        ".jw-media,video{width:100%!important;height:100%!important;opacity:1!important;visibility:visible!important;background:transparent!important;object-fit:contain!important;pointer-events:auto!important;}",
+        ".jw-media,video,canvas.jw-video{opacity:1!important;visibility:visible!important;background:transparent!important;z-index:1!important;}",
         "#overlay{pointer-events:none!important;display:none!important;}"
       ].join("");
       (document.head||document.documentElement).appendChild(s);

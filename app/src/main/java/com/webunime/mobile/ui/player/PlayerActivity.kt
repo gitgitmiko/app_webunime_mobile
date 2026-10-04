@@ -498,10 +498,31 @@ private fun PlaybackSurface(url: String) {
                     settings.useWideViewPort = true
                     settings.userAgentString =
                         "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    setLayerType(View.LAYER_TYPE_NONE, null)
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    webChromeClient = WebChromeClient()
+                    webChromeClient = object : WebChromeClient() {
+                        private var customView: View? = null
+                        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                            val parent = this@apply.parent as? ViewGroup ?: return
+                            customView?.let { old -> (old.parent as? ViewGroup)?.removeView(old) }
+                            customView = view
+                            parent.addView(
+                                view,
+                                FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                ),
+                            )
+                        }
+
+                        override fun onHideCustomView() {
+                            customView?.let { view ->
+                                (view.parent as? ViewGroup)?.removeView(view)
+                            }
+                            customView = null
+                        }
+                    }
                     webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(
                             view: WebView,
