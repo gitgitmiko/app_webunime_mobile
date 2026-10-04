@@ -58,12 +58,22 @@ class CatalogRepository(
     private val cacheDir: File
         get() = File(context.filesDir, "catalog/mobile").also { if (!it.exists()) it.mkdirs() }
 
+    private val filmCacheDir: File
+        get() = File(context.filesDir, "catalog/film").also { if (!it.exists()) it.mkdirs() }
+
+    private val filmRawBase: String
+        get() = githubRawBase.replace("/mobile/", "/")
+
+    private val filmCdnBase: String
+        get() = githubJsDelivrBase.replace("/mobile/", "/")
+
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     private val lightMutex = Mutex()
     private val heavyMutex = Mutex()
+    private val filmMutex = Mutex()
     private val lightSyncDone = AtomicBoolean(false)
     private val itemCache = ConcurrentHashMap<String, CatalogAnimeItem>()
 
@@ -85,6 +95,22 @@ class CatalogRepository(
             scheduleToday = schedule.days.firstOrNull {
                 it.day.equals(schedule.today, ignoreCase = true)
             },
+        )
+    }
+
+    suspend fun filmHome(): FilmHome = withContext(Dispatchers.IO) {
+        ensureFilmFiles()
+        val movies = readAnimeList(FILE_LK_MOVIES, filmCacheDir).map { it.toCard() }
+        val horror = readAnimeList(FILE_HORROR, filmCacheDir).map { it.toCard() }
+        val series = readAnimeList(FILE_SERIES_INDEX, filmCacheDir).map { it.toCard() }
+        val latestSeries = readLatestList(FILE_SERIES_LATEST, filmCacheDir)
+        FilmHome(
+            latestMovies = movies.take(HOME_ROW_LIMIT),
+            topMovies = topRated(movies),
+            latestHorror = horror.take(HOME_ROW_LIMIT),
+            topHorror = topRated(horror),
+            latestSeries = latestSeries.take(HOME_ROW_LIMIT),
+            series = series.take(HOME_ROW_LIMIT),
         )
     }
 
@@ -115,8 +141,8 @@ class CatalogRepository(
         readCalendar(FILE_SCHEDULE)
     }
 
-    suspend fun anime(slug: String): AnimeDetail = withContext(Dispatchers.IO) {
-        val item = hydrate(slug) ?: error("Anime tidak ditemukan: $slug")
+    suspend fun anime(slug: String, collection: String = "anime"): AnimeDetail = withContext(Dispatchers.IO) {
+        val item = hydrate(slug, collection) ?: error("Judul tidak ditemukan: $slug")
         item.toDetail()
     }
 
@@ -124,7 +150,22 @@ class CatalogRepository(
      * Season saat ini + related (S1/S2/…) untuk dropdown terpisah.
      * Related di-hydrate on-demand (cache dipakai ulang).
      */
-    suspend fun seasonsFor(slug: String): List<SeasonGroup> = withContext(Dispatchers.IO) {
+    suspend fun seasonsFor(slug: String, collection: String = "anime"): List<SeasonGroup> =
+        withContext(Dispatchers.IO) {
+        if (collection == "movies" || collection == "horror") return@withContext emptyList()
+        if (collection == "series") {
+            val current = hydrate(slug, "series") ?: error("Series tidak ditemukan: $slug")
+            val detail = current.toDetail()
+            val currentSlug = current.slug?.takeIf { it.isNotBlank() } ?: slug
+            return@withContext listOf(
+                SeasonGroup(
+                    label = "Episode",
+                    animeSlug = currentSlug,
+                    episodes = detail.episodes,
+                    isCurrent = true,
+                ),
+            )
+        }
         val current = hydrate(slug) ?: error("Anime tidak ditemukan: $slug")
         val groups = mutableListOf<SeasonGroup>()
         val currentSlug = current.slug?.takeIf { it.isNotBlank() } ?: slug
@@ -159,8 +200,9 @@ class CatalogRepository(
         )
     }
 
-    suspend fun episode(slug: String, n: Int): EpisodePlayback = withContext(Dispatchers.IO) {
-        val item = hydrate(slug) ?: error("Anime tidak ditemukan: $slug")
+    suspend fun episode(slug: String, n: Int, collection: String = "anime"): EpisodePlayback =
+        withContext(Dispatchers.IO) {
+        val item = hydrate(slug, collection) ?: error("Judul tidak ditemukan: $slug")
         val playback = item.playbackFor(n)
         if (playback.episode?.players.isNullOrEmpty()) {
             error("Tidak ada player untuk episode $n")
@@ -168,29 +210,57 @@ class CatalogRepository(
         playback
     }
 
-    private suspend fun hydrate(slug: String): CatalogAnimeItem? {
+    private suspend fun hydrate(slug: String, collection: String = "anime"): CatalogAnimeItem? {
         val key = slug.trim()
         if (key.isBlank()) return null
-        itemCache[key.lowercase(Locale.ROOT)]?.let { return it }
+        val cacheKey = "${collection.lowercase(Locale.ROOT)}:${key.lowercase(Locale.ROOT)}"
+        itemCache[cacheKey]?.let { return it }
+        when (collection) {
+            "movies" -> {
+                ensureFilmFiles()
+                findInFile(FILE_LK_MOVIES, key, filmCacheDir)?.let {
+                    remember(it, "movies")
+                    return it
+                }
+                return null
+            }
+            "horror" -> {
+                ensureFilmFiles()
+                findInFile(FILE_HORROR, key, filmCacheDir)?.let {
+                    remember(it, "horror")
+                    return it
+                }
+                return null
+            }
+            "series" -> {
+                ensureSeriesFile()
+                findInFile(FILE_SERIES, key, filmCacheDir)?.let {
+                    remember(it, "series")
+                    return it
+                }
+                return null
+            }
+        }
+        itemCache["anime:${key.lowercase(Locale.ROOT)}"]?.let { return it }
 
         ensureLightFiles()
         // Coba movies dulu (lebih kecil) sebelum unduh anime.json.
         findInFile(FILE_MOVIES, key)?.let {
-            remember(it)
+            remember(it, "anime")
             return it
         }
 
         ensureHeavyFile(FILE_ANIME)
         findInFile(FILE_ANIME, key)?.let {
-            remember(it)
+            remember(it, "anime")
             return it
         }
         return null
     }
 
-    private fun remember(item: CatalogAnimeItem) {
+    private fun remember(item: CatalogAnimeItem, collection: String) {
         item.slug?.takeIf { it.isNotBlank() }?.let {
-            itemCache[it.lowercase(Locale.ROOT)] = item
+            itemCache["${collection.lowercase(Locale.ROOT)}:${it.lowercase(Locale.ROOT)}"] = item
         }
     }
 
@@ -253,8 +323,49 @@ class CatalogRepository(
         }
     }
 
-    private fun readLatestList(fileName: String): List<LatestItem> {
-        openStream(fileName)?.use { input ->
+    private suspend fun ensureFilmFiles() {
+        filmMutex.withLock {
+            val missing = FILM_LIGHT_FILES.any { name ->
+                val f = File(filmCacheDir, name)
+                !f.exists() || f.length() < 2L
+            }
+            if (!missing && prefs.getString(KEY_FILM_SYNC, null) == todayKey()) return
+            var ok = 0
+            for (name in FILM_LIGHT_FILES) {
+                if (runCatching {
+                        downloadAndCache(name, filmCacheDir, filmRawBase, filmCdnBase)
+                    }.isSuccess
+                ) {
+                    ok++
+                }
+            }
+            if (ok > 0) {
+                prefs.edit().putString(KEY_FILM_SYNC, todayKey()).apply()
+            }
+        }
+    }
+
+    private suspend fun ensureSeriesFile() {
+        val dest = File(filmCacheDir, FILE_SERIES)
+        if (dest.exists() && dest.length() > 50_000L) return
+        heavyMutex.withLock {
+            if (dest.exists() && dest.length() > 50_000L) return
+            downloadAndCache(FILE_SERIES, filmCacheDir, filmRawBase, filmCdnBase)
+        }
+    }
+
+    private fun topRated(items: List<AnimeCard>, limit: Int = TOP_ROW_LIMIT): List<AnimeCard> {
+        fun score(card: AnimeCard): Double {
+            val raw = card.rating?.trim()?.replace(',', '.') ?: return 0.0
+            return raw.toDoubleOrNull() ?: 0.0
+        }
+        val high = items.filter { score(it) > 8.0 }
+        val pool = if (high.size >= 8) high else items.sortedByDescending { score(it) }
+        return pool.shuffled().take(limit)
+    }
+
+    private fun readLatestList(fileName: String, dir: File = cacheDir): List<LatestItem> {
+        openStream(fileName, dir)?.use { input ->
             return runCatching {
                 latestAdapter.fromJson(input.source().buffer()).orEmpty()
             }.getOrDefault(emptyList())
@@ -271,8 +382,8 @@ class CatalogRepository(
         return emptyList()
     }
 
-    private fun readAnimeList(fileName: String): List<CatalogAnimeItem> {
-        openStream(fileName)?.use { input ->
+    private fun readAnimeList(fileName: String, dir: File = cacheDir): List<CatalogAnimeItem> {
+        openStream(fileName, dir)?.use { input ->
             return runCatching {
                 animeListAdapter.fromJson(input.source().buffer()).orEmpty()
             }.getOrDefault(emptyList())
@@ -290,8 +401,8 @@ class CatalogRepository(
         return base.copy(today = base.today?.takeIf { it.isNotBlank() } ?: deviceWeekday())
     }
 
-    private fun findInFile(fileName: String, slug: String): CatalogAnimeItem? {
-        openStream(fileName)?.use { input ->
+    private fun findInFile(fileName: String, slug: String, dir: File = cacheDir): CatalogAnimeItem? {
+        openStream(fileName, dir)?.use { input ->
             return findItemInStream(input, slug)
         }
         return null
@@ -314,8 +425,8 @@ class CatalogRepository(
     }
 
     /** Cache file, lalu assets seed (hanya file ringan). */
-    private fun openStream(fileName: String): java.io.InputStream? {
-        val cached = File(cacheDir, fileName)
+    private fun openStream(fileName: String, dir: File = cacheDir): java.io.InputStream? {
+        val cached = File(dir, fileName)
         if (cached.exists() && cached.length() > 2) {
             return cached.inputStream()
         }
@@ -324,9 +435,14 @@ class CatalogRepository(
         }.getOrNull()
     }
 
-    private fun downloadAndCache(fileName: String) {
-        val baseRaw = githubRawBase.trimEnd('/') + "/"
-        val baseCdn = githubJsDelivrBase.trimEnd('/') + "/"
+    private fun downloadAndCache(
+        fileName: String,
+        dir: File = cacheDir,
+        rawBase: String = githubRawBase,
+        cdnBase: String = githubJsDelivrBase,
+    ) {
+        val baseRaw = rawBase.trimEnd('/') + "/"
+        val baseCdn = cdnBase.trimEnd('/') + "/"
         val urls = listOf("$baseRaw$fileName", "$baseCdn$fileName")
         var lastError: Throwable? = null
         for (url in urls) {
@@ -339,7 +455,7 @@ class CatalogRepository(
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) error("HTTP ${response.code} for $fileName")
                     val body = response.body ?: error("Empty body $fileName")
-                    val tmp = File(cacheDir, "$fileName.part")
+                    val tmp = File(dir, "$fileName.part")
                     tmp.outputStream().use { out ->
                         body.byteStream().use { input -> input.copyTo(out) }
                     }
@@ -358,7 +474,7 @@ class CatalogRepository(
                             error("Invalid JSON root $fileName")
                         }
                     }
-                    val dest = File(cacheDir, fileName)
+                    val dest = File(dir, fileName)
                     if (dest.exists()) dest.delete()
                     if (!tmp.renameTo(dest)) {
                         tmp.copyTo(dest, overwrite = true)
@@ -386,13 +502,28 @@ class CatalogRepository(
         private const val FILE_SCHEDULE = "anime-schedule.json"
         private const val FILE_INDEX = "anime-index.json"
         private const val FILE_ANIME = "anime.json"
+        private const val FILE_LK_MOVIES = "movies.json"
+        private const val FILE_HORROR = "horror.json"
+        private const val FILE_SERIES_LATEST = "series-latest.json"
+        private const val FILE_SERIES_INDEX = "series-index.json"
+        private const val FILE_SERIES = "series.json"
         private const val HOME_ANIME_LIMIT = 24
+        private const val HOME_ROW_LIMIT = 24
+        private const val TOP_ROW_LIMIT = 18
+        private const val KEY_FILM_SYNC = "last_film_sync_day"
 
         private val LIGHT_FILES = listOf(
             FILE_LATEST,
             FILE_MOVIES,
             FILE_SCHEDULE,
             FILE_INDEX,
+        )
+
+        private val FILM_LIGHT_FILES = listOf(
+            FILE_LK_MOVIES,
+            FILE_HORROR,
+            FILE_SERIES_LATEST,
+            FILE_SERIES_INDEX,
         )
     }
 }

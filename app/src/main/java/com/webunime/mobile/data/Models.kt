@@ -13,6 +13,16 @@ data class HomeResponse(
 )
 
 @JsonClass(generateAdapter = false)
+data class FilmHome(
+    val latestMovies: List<AnimeCard> = emptyList(),
+    val topMovies: List<AnimeCard> = emptyList(),
+    val latestHorror: List<AnimeCard> = emptyList(),
+    val topHorror: List<AnimeCard> = emptyList(),
+    val latestSeries: List<LatestItem> = emptyList(),
+    val series: List<AnimeCard> = emptyList(),
+)
+
+@JsonClass(generateAdapter = false)
 data class LatestItem(
     val anime_slug: String? = null,
     val slug: String? = null,
@@ -22,9 +32,10 @@ data class LatestItem(
     val thumbnail: String? = null,
     val released_at: String? = null,
     val released_on: String? = null,
+    val series_slug: String? = null,
 ) {
-    fun displayTitle(): String = judul ?: nama ?: slug ?: anime_slug ?: "Tanpa judul"
-    fun catalogSlug(): String = anime_slug ?: slug ?: ""
+    fun displayTitle(): String = judul ?: nama ?: slug ?: series_slug ?: anime_slug ?: "Tanpa judul"
+    fun catalogSlug(): String = series_slug ?: anime_slug ?: slug ?: ""
 }
 
 @JsonClass(generateAdapter = false)
@@ -202,6 +213,17 @@ data class CatalogAnimeItem(
             compareBy<EpisodeSummary> { it.episode ?: Int.MAX_VALUE }
                 .thenBy { it.title.orEmpty() },
         )
+        val playable = if (eps.isEmpty() && players.isNotEmpty()) {
+            listOf(
+                EpisodeSummary(
+                    episode = 1,
+                    title = "Putar",
+                    has_players = true,
+                ),
+            )
+        } else {
+            eps
+        }
         return AnimeDetail(
             slug = slug,
             judul = judul,
@@ -212,10 +234,10 @@ data class CatalogAnimeItem(
             genre = genre,
             sinopsis = sinopsis,
             episodes_count = episodes_count ?: eps.size.takeIf { it > 0 },
+            episodes = playable,
             mal_id = mal_id,
             season_label = season_label,
             related = related,
-            episodes = eps,
         )
     }
 

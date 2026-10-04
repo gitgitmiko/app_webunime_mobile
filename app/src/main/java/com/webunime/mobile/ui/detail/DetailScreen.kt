@@ -68,6 +68,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun DetailScreen(
     slug: String,
+    collection: String = "anime",
+    initialEpisode: Int = -1,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -85,14 +87,15 @@ fun DetailScreen(
             loading = true
             error = null
             runCatching {
-                val d = app.catalogApi.anime(slug)
-                val s = app.catalogApi.seasonsFor(slug)
+                val d = app.catalogApi.anime(slug, collection)
+                val s = app.catalogApi.seasonsFor(slug, collection)
                 d to s
             }.onSuccess { (d, s) ->
                 detail = d
                 seasons = s
                 selectedBySeason = s.associate { group ->
-                    val pick = group.episodes.lastOrNull()
+                    val pick = group.episodes.firstOrNull { it.episode == initialEpisode }
+                        ?: group.episodes.lastOrNull()
                         ?: group.episodes.firstOrNull()
                     group.animeSlug to (pick ?: EpisodeSummary())
                 }.filterValues { it.episode != null }
@@ -106,6 +109,7 @@ fun DetailScreen(
             putExtra(PlayerActivity.EXTRA_SLUG, animeSlug)
             putExtra(PlayerActivity.EXTRA_EPISODE, episode)
             putExtra(PlayerActivity.EXTRA_TITLE, title)
+            putExtra(PlayerActivity.EXTRA_COLLECTION, collection)
         }
         context.startActivity(i)
         scope.launch {
@@ -113,7 +117,7 @@ fun DetailScreen(
         }
     }
 
-    LaunchedEffect(slug) { reload() }
+    LaunchedEffect(slug, collection, initialEpisode) { reload() }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -262,11 +266,19 @@ fun DetailScreen(
                                         "Tonton",
                                         modifier = Modifier.padding(horizontal = 0.dp),
                                     )
+                                    val isMovie = collection == "movies" || collection == "horror"
                                     Text(
-                                        "Pilih episode untuk mulai menonton",
+                                        if (isMovie) "Tekan untuk mulai menonton" else "Pilih episode untuk mulai menonton",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    if (isMovie && data.episodes.isNotEmpty()) {
+                                        TextButton(
+                                            onClick = {
+                                                openPlayer(slug, data.episodes.first().episode ?: 1, data.displayTitle())
+                                            },
+                                        ) { Text("Putar") }
+                                    }
 
                                     val groups = seasons.ifEmpty {
                                         listOf(
@@ -279,7 +291,7 @@ fun DetailScreen(
                                         )
                                     }
 
-                                    groups.forEach { group ->
+                                    if (!isMovie) groups.forEach { group ->
                                         val selected = selectedBySeason[group.animeSlug]
                                         val dropdownLabel =
                                             if (groups.size > 1) group.label else "Episode"
@@ -301,9 +313,15 @@ fun DetailScreen(
                                         )
                                     }
 
-                                    if (groups.all { it.episodes.isEmpty() }) {
+                                    if (!isMovie && groups.all { it.episodes.isEmpty() }) {
                                         Text(
                                             "Belum ada episode.",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    if (isMovie && data.episodes.isEmpty()) {
+                                        Text(
+                                            "Belum ada server.",
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }

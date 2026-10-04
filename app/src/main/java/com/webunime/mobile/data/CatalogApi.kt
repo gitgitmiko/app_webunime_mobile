@@ -17,15 +17,19 @@ class CatalogApi(
 
     suspend fun home(): HomeResponse = repo.home()
 
+    suspend fun filmHome(): FilmHome = repo.filmHome()
+
     suspend fun search(q: String, limit: Int = 30): SearchResponse =
         repo.search(q, limit)
 
     suspend fun calendar(): CalendarResponse = repo.calendar()
 
-    suspend fun anime(slug: String): AnimeDetail = repo.anime(slug)
+    suspend fun anime(slug: String, collection: String = "anime"): AnimeDetail =
+        repo.anime(slug, collection)
 
-    suspend fun seasonsFor(slug: String): List<SeasonGroup> = repo.seasonsFor(slug)
+    suspend fun seasonsFor(slug: String, collection: String = "anime"): List<SeasonGroup> =
+        repo.seasonsFor(slug, collection)
 
-    suspend fun episode(slug: String, n: Int): EpisodePlayback =
-        repo.episode(slug, n)
+    suspend fun episode(slug: String, n: Int, collection: String = "anime"): EpisodePlayback =
+        repo.episode(slug, n, collection)
 }

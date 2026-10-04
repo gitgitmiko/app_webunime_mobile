@@ -88,6 +88,7 @@ class PlayerActivity : ComponentActivity() {
         val slug = intent.getStringExtra(EXTRA_SLUG).orEmpty()
         val startEpisode = intent.getIntExtra(EXTRA_EPISODE, 1)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        val collection = intent.getStringExtra(EXTRA_COLLECTION)?.takeIf { it.isNotBlank() } ?: "anime"
         val app = application as WebunimeApp
 
         setContent {
@@ -111,8 +112,8 @@ class PlayerActivity : ComponentActivity() {
                 var animeTitle by remember { mutableStateOf(title) }
                 var animeDetail by remember { mutableStateOf<AnimeDetail?>(null) }
 
-                LaunchedEffect(slug) {
-                    runCatching { app.catalogApi.anime(slug) }
+                LaunchedEffect(slug, collection) {
+                    runCatching { app.catalogApi.anime(slug, collection) }
                         .onSuccess { detail ->
                             animeDetail = detail
                             animeTitle = detail.displayTitle()
@@ -120,10 +121,10 @@ class PlayerActivity : ComponentActivity() {
                         }
                 }
 
-                LaunchedEffect(slug, currentEpisode) {
+                LaunchedEffect(slug, collection, currentEpisode) {
                     loading = true
                     error = null
-                    runCatching { app.catalogApi.episode(slug, currentEpisode) }
+                    runCatching { app.catalogApi.episode(slug, currentEpisode, collection) }
                         .onSuccess { payload ->
                             epTitle = payload.episode?.title
                                 ?: payload.judul
@@ -283,6 +284,7 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_SLUG = "slug"
         const val EXTRA_EPISODE = "episode"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_COLLECTION = "collection"
     }
 }
 

@@ -127,6 +127,9 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             HomeScreen(
                                 onOpenAnime = { slug -> nav.navigate("detail/$slug") },
+                                onOpenTitle = { collection, slug, episode ->
+                                    nav.navigate("detail/$collection/$slug?ep=$episode")
+                                },
                             )
                         }
                         composable("search") {
@@ -142,6 +145,27 @@ class MainActivity : ComponentActivity() {
                         composable("settings") {
                             AccountScreen(
                                 onCheckUpdate = { updateCheckTrigger++ },
+                            )
+                        }
+                        composable(
+                            route = "detail/{collection}/{slug}?ep={ep}",
+                            arguments = listOf(
+                                navArgument("collection") { type = NavType.StringType },
+                                navArgument("slug") { type = NavType.StringType },
+                                navArgument("ep") {
+                                    type = NavType.IntType
+                                    defaultValue = -1
+                                },
+                            ),
+                        ) { entry ->
+                            val slug = entry.arguments?.getString("slug").orEmpty()
+                            val collection = entry.arguments?.getString("collection").orEmpty()
+                            val episode = entry.arguments?.getInt("ep") ?: -1
+                            DetailScreen(
+                                slug = slug,
+                                collection = collection,
+                                initialEpisode = episode,
+                                onBack = { nav.popBackStack() },
                             )
                         }
                         composable(

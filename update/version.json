@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "0.3.1",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.1/Weeboonime-v0.3.1.apk",
-  "changelog": "APK release bertanda tangan (perbaikan install di HyperOS/Poco). UI Weeboonime 0.3.x."
+  "versionCode": 5,
+  "versionName": "0.3.2",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.2/Weeboonime-v0.3.2.apk",
+  "changelog": "Beranda memilih Anime atau Film. Film: terbaru, top, horor, series, dan series terbaru."
 }

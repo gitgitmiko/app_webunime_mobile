@@ -106,7 +106,10 @@ fun BrandLogo(
 }
 
 @Composable
-fun BrandHeader(modifier: Modifier = Modifier) {
+fun BrandHeader(
+    modifier: Modifier = Modifier,
+    subtitle: String = "Katalog anime terbaru & jadwal rilis",
+) {
     Column(modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Image(
             painter = painterResource(R.drawable.logo_transparan),
@@ -118,7 +121,7 @@ fun BrandHeader(modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Katalog anime terbaru & jadwal rilis",
+            text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
