@@ -80,11 +80,19 @@ class CatalogRepository(
     suspend fun home(): HomeResponse = withContext(Dispatchers.IO) {
         ensureLightFiles()
         val latest = readLatestList(FILE_LATEST)
-        val anime = readAnimeList(FILE_INDEX).map { it.toCard() }.ifEmpty {
+        val indexItems = readAnimeList(FILE_INDEX)
+        val anime = indexItems.map { it.toCard() }.ifEmpty {
             readCardList(FILE_INDEX)
         }.take(HOME_ANIME_LIMIT)
-        val movies = readAnimeList(FILE_MOVIES).map { it.toCard() }.ifEmpty {
-            readCardList(FILE_MOVIES)
+        val indexThumbs = thumbnailIndex(indexItems)
+        val movies = readAnimeList(FILE_MOVIES).map { item ->
+            item.withResolvedThumbnail(
+                indexThumbs[item.slug?.lowercase(Locale.ROOT).orEmpty()],
+            ).toCard()
+        }.ifEmpty {
+            readCardList(FILE_MOVIES).map { card ->
+                enrichCardThumbnail(card, indexThumbs)
+            }
         }
         val schedule = readCalendar(FILE_SCHEDULE)
         HomeResponse(
@@ -129,9 +137,15 @@ class CatalogRepository(
             }
         } else {
             ensureLightFiles()
-            readAnimeList(FILE_INDEX).map { it.toCard("anime") }.ifEmpty {
+            val indexItems = readAnimeList(FILE_INDEX)
+            val indexThumbs = thumbnailIndex(indexItems)
+            indexItems.map { it.toCard("anime") }.ifEmpty {
                 readCardList(FILE_INDEX).map { it.copy(catalog = "anime") }
-            } + readAnimeList(FILE_MOVIES).map { it.toCard("anime") }
+            } + readAnimeList(FILE_MOVIES).map { item ->
+                item.withResolvedThumbnail(
+                    indexThumbs[item.slug?.lowercase(Locale.ROOT).orEmpty()],
+                ).toCard("anime")
+            }
         }
         val items = pool
             .asSequence()
@@ -256,17 +270,36 @@ class CatalogRepository(
 
         ensureLightFiles()
         // Coba movies dulu (lebih kecil) sebelum unduh anime.json.
-        findInFile(FILE_MOVIES, key)?.let {
-            remember(it, "anime")
-            return it
+        findInFile(FILE_MOVIES, key)?.let { raw ->
+            val fromIndex = findInFile(FILE_INDEX, key)?.resolvedThumbnail()
+            val patched = raw.withResolvedThumbnail(fromIndex)
+            remember(patched, "anime")
+            return patched
         }
 
         ensureHeavyFile(FILE_ANIME)
         findInFile(FILE_ANIME, key)?.let {
-            remember(it, "anime")
-            return it
+            val patched = it.withResolvedThumbnail()
+            remember(patched, "anime")
+            return patched
         }
         return null
+    }
+
+    private fun thumbnailIndex(items: List<CatalogAnimeItem>): Map<String, String> {
+        val out = HashMap<String, String>(items.size)
+        for (item in items) {
+            val slug = item.slug?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() } ?: continue
+            val thumb = item.resolvedThumbnail() ?: continue
+            out.putIfAbsent(slug, thumb)
+        }
+        return out
+    }
+
+    private fun enrichCardThumbnail(card: AnimeCard, indexThumbs: Map<String, String>): AnimeCard {
+        if (PosterUrls.isUsable(card.thumbnail)) return card
+        val fallback = indexThumbs[card.slug?.lowercase(Locale.ROOT).orEmpty()]
+        return if (PosterUrls.isUsable(fallback)) card.copy(thumbnail = fallback) else card
     }
 
     private fun remember(item: CatalogAnimeItem, collection: String) {

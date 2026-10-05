@@ -186,6 +186,7 @@ data class CatalogAnimeItem(
     val judul: String? = null,
     val nama: String? = null,
     val thumbnail: String? = null,
+    val thumbnail_landscape: String? = null,
     val rating: String? = null,
     val type: String? = null,
     val genre: List<String>? = null,
@@ -198,6 +199,14 @@ data class CatalogAnimeItem(
     val players: List<PlayerServer> = emptyList(),
 ) {
     fun displayTitle(): String = judul ?: nama ?: slug ?: "Tanpa judul"
+
+    /** Poster yang bisa dimuat Coil; fallback ke landscape bila thumbnail rusak. */
+    fun resolvedThumbnail(): String? = PosterUrls.resolve(thumbnail, thumbnail_landscape)
+
+    fun withResolvedThumbnail(fallback: String? = null): CatalogAnimeItem {
+        val poster = PosterUrls.resolve(resolvedThumbnail(), fallback) ?: return this
+        return if (poster == thumbnail) this else copy(thumbnail = poster)
+    }
 
     fun toDetail(): AnimeDetail {
         val eps = episodes.map { ep ->
@@ -229,7 +238,7 @@ data class CatalogAnimeItem(
             slug = slug,
             judul = judul,
             nama = nama,
-            thumbnail = thumbnail,
+            thumbnail = resolvedThumbnail(),
             rating = rating,
             type = type,
             genre = genre,
@@ -246,7 +255,7 @@ data class CatalogAnimeItem(
         slug = slug,
         judul = judul,
         nama = nama,
-        thumbnail = thumbnail,
+        thumbnail = resolvedThumbnail(),
         rating = rating,
         type = type,
         genre = genre,
@@ -272,7 +281,7 @@ data class CatalogAnimeItem(
         return EpisodePlayback(
             slug = slug,
             judul = displayTitle(),
-            thumbnail = thumbnail,
+            thumbnail = resolvedThumbnail(),
             episode = EpisodePayload(
                 episode = resolved,
                 title = ep?.title ?: "Episode $resolved",
