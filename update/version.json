@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "0.3.8",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.8/Weeboonime-v0.3.8.apk",
-  "changelog": "Hydrax/TurboVIP/P2P: player kembali jalan + kontrol native app (play, jeda, ±10 dtk, mute)."
+  "versionCode": 12,
+  "versionName": "0.3.9",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.9/Weeboonime-v0.3.9.apk",
+  "changelog": "Poster kartu anime movie diperbaiki (fallback thumbnail_landscape / index)."
 }
