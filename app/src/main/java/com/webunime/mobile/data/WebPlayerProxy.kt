@@ -990,12 +990,18 @@ ${wrapperIframeBridgeJs()}
     // Auto-hide chrome JWPlayer saat playing; muncul lagi saat gesture singkat
     window.__wuShowPlayerUi=function(){
       try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(true); }catch(e){}
-      try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){ el.style.removeProperty("display"); el.style.removeProperty("opacity"); }); }catch(e){}
+      try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){ el.style.removeProperty("display"); el.style.removeProperty("opacity"); el.style.removeProperty("visibility"); }); }catch(e){}
       clearTimeout(window.__wuHideUiT);
-      window.__wuHideUiT=setTimeout(function(){ try{window.__wuShowPlayerUi();}catch(e){} }, 3500);
+      window.__wuHideUiT=setTimeout(function(){ try{window.__wuHidePlayerUi();}catch(e){} }, 3000);
     };
     window.__wuHidePlayerUi=function(){
-      window.__wuShowPlayerUi();
+      if(window.__wuUserPaused) return;
+      try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(false); }catch(e){}
+      try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){
+        el.style.setProperty("opacity","0","important");
+        el.style.setProperty("visibility","hidden","important");
+        el.style.setProperty("pointer-events","none","important");
+      }); }catch(e){}
     };
     var tt=0; var tiv=setInterval(function(){ tt++; try {
       if(typeof enablePlay!=="undefined") enablePlay="yes";
@@ -1102,33 +1108,53 @@ ${wrapperIframeBridgeJs()}
     setTimeout(p2pTryPlay, 2600);
   }
 
-  // Auto-hide kontrol JWPlayer juga untuk Hydrax saat playing
-  if (IS_ABYSS) {
-    window.__wuHidePlayerUi=function(){};
-    window.__wuShowPlayerUi=function(){
-      try{ var jp=__wuJwAny(); if(jp&&typeof jp.setControls==="function") jp.setControls(true); }catch(e){}
-      try{ document.querySelectorAll(".jw-controls,.jw-controlbar").forEach(function(el){ el.style.removeProperty("display"); el.style.removeProperty("opacity"); el.style.setProperty("pointer-events","auto","important"); }); }catch(e){}
+  // Auto-hide kontrol JWPlayer (Hydrax/Turbo/dll): hilang saat playing,
+  // muncul lagi saat layar disentuh.
+  (function autoHidePlayerUi(){
+    window.__wuHidePlayerUi=function(){
+      if(window.__wuUserPaused) return;
+      try{ var jp=typeof __wuJwAny==="function"?__wuJwAny():__wuJw(); if(jp&&typeof jp.setControls==="function") jp.setControls(false); }catch(e){}
+      try{ document.querySelectorAll(".jw-controls,.jw-controlbar,.jw-display-controls").forEach(function(el){
+        el.style.setProperty("opacity","0","important");
+        el.style.setProperty("visibility","hidden","important");
+        el.style.setProperty("pointer-events","none","important");
+      }); }catch(e){}
     };
-  }
-  (function keepMobileControls(){
-    window.__wuHidePlayerUi=function(){};
+    window.__wuShowPlayerUi=function(){
+      try{ var jp=typeof __wuJwAny==="function"?__wuJwAny():__wuJw(); if(jp&&typeof jp.setControls==="function") jp.setControls(true); }catch(e){}
+      try{ document.querySelectorAll(".jw-controls,.jw-controlbar,.jw-display-controls").forEach(function(el){
+        el.style.removeProperty("display");
+        el.style.removeProperty("opacity");
+        el.style.removeProperty("visibility");
+        el.style.setProperty("pointer-events","auto","important");
+      }); }catch(e){}
+      clearTimeout(window.__wuHideUiT);
+      window.__wuHideUiT=setTimeout(function(){
+        try{
+          if(!window.__wuUserPaused && __wuIsPlaying()) window.__wuHidePlayerUi();
+        }catch(e){}
+      }, 3000);
+    };
     try{
       var s=document.createElement("style");
       s.setAttribute("data-webunime-mobile-controls","1");
       s.textContent=[
-        ".jw-controlbar,.jw-controls{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:50!important;}",
+        ".jw-controlbar,.jw-controls{transition:opacity .25s ease;z-index:50!important;}",
         ".jw-display,.jw-preview{display:none!important;opacity:0!important;pointer-events:none!important;}",
         ".jw-media,video,canvas.jw-video{opacity:1!important;visibility:visible!important;background:transparent!important;z-index:1!important;}",
         "#overlay{pointer-events:none!important;display:none!important;}"
       ].join("");
       (document.head||document.documentElement).appendChild(s);
     }catch(e){}
+    function onUserTouch(){ try{ window.__wuShowPlayerUi(); }catch(e){} }
+    document.addEventListener("pointerdown", onUserTouch, true);
+    document.addEventListener("touchstart", onUserTouch, true);
+    document.addEventListener("click", onUserTouch, true);
     var n=0;
     var iv=setInterval(function(){
       n++;
       try{
-        var jp=typeof __wuJwAny==="function"?__wuJwAny():null;
-        if(jp&&typeof jp.setControls==="function") jp.setControls(true);
+        if(__wuIsPlaying()){ window.__wuShowPlayerUi(); clearInterval(iv); }
       }catch(e){}
       if(n>48) clearInterval(iv);
     }, 400);

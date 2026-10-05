@@ -19,7 +19,12 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +97,7 @@ import com.webunime.mobile.ui.theme.WebunimeTheme
 import com.webunime.mobile.ui.theme.WuBg
 import com.webunime.mobile.ui.theme.WuStroke
 import com.webunime.mobile.ui.theme.WuSurface
+import kotlinx.coroutines.delay
 
 class PlayerActivity : ComponentActivity() {
 
@@ -649,28 +655,67 @@ private fun PlaybackSurface(url: String) {
             modifier = Modifier.fillMaxSize(),
         )
         if (filmWeb) {
-            FilmNativeControls(
-                playing = playing,
-                muted = muted,
-                onPlayPause = {
-                    if (playing) runPlayerJs("try{window.__wuPause&&window.__wuPause()}catch(e){}")
-                    else runPlayerJs("try{window.__wuPlay&&window.__wuPlay()}catch(e){}")
-                    playing = !playing
-                },
-                onSeekBack = {
-                    runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(-10)}catch(e){}")
-                },
-                onSeekForward = {
-                    runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(10)}catch(e){}")
-                },
-                onMute = {
-                    muted = !muted
-                    runPlayerJs("try{window.__wuMuteToggle&&window.__wuMuteToggle()}catch(e){}")
-                },
+            var controlsVisible by remember(playUrl) { mutableStateOf(true) }
+            var controlsEpoch by remember(playUrl) { mutableIntStateOf(0) }
+            fun revealControls() {
+                controlsVisible = true
+                controlsEpoch++
+            }
+
+            LaunchedEffect(playing) {
+                if (!playing) revealControls()
+            }
+            LaunchedEffect(playing, controlsVisible, controlsEpoch) {
+                if (!controlsVisible || !playing) return@LaunchedEffect
+                delay(3_000)
+                controlsVisible = false
+            }
+
+            // Area sentuh: tampilkan / sembunyikan kontrol (WebView tidak menerima tap ini).
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (controlsVisible) controlsVisible = false
+                        else revealControls()
+                    },
+            )
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
-            )
+            ) {
+                FilmNativeControls(
+                    playing = playing,
+                    muted = muted,
+                    onPlayPause = {
+                        revealControls()
+                        if (playing) runPlayerJs("try{window.__wuPause&&window.__wuPause()}catch(e){}")
+                        else runPlayerJs("try{window.__wuPlay&&window.__wuPlay()}catch(e){}")
+                        playing = !playing
+                    },
+                    onSeekBack = {
+                        revealControls()
+                        runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(-10)}catch(e){}")
+                    },
+                    onSeekForward = {
+                        revealControls()
+                        runPlayerJs("try{window.__wuSeekBy&&window.__wuSeekBy(10)}catch(e){}")
+                    },
+                    onMute = {
+                        revealControls()
+                        muted = !muted
+                        runPlayerJs("try{window.__wuMuteToggle&&window.__wuMuteToggle()}catch(e){}")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         }
     }
@@ -689,6 +734,11 @@ private fun FilmNativeControls(
     Row(
         modifier
             .background(Color.Black.copy(alpha = 0.55f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { /* tahan tap agar tidak menembus overlay hide */ },
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,

@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "0.3.9",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.9/Weeboonime-v0.3.9.apk",
-  "changelog": "Poster kartu anime movie diperbaiki (fallback thumbnail_landscape / index)."
+  "versionCode": 13,
+  "versionName": "0.3.10",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.10/Weeboonime-v0.3.10.apk",
+  "changelog": "Kontrol player film (Hydrax/dll) otomatis hide; sentuh layar untuk muncul lagi."
 }
