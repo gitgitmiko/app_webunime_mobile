@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.3.10",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.3.10/Weeboonime-v0.3.10.apk",
-  "changelog": "Kontrol player film (Hydrax/dll) otomatis hide; sentuh layar untuk muncul lagi."
+  "versionCode": 14,
+  "versionName": "0.4.0",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.4.0/Weeboonime-v0.4.0.apk",
+  "changelog": "Katalog kini dari server (pencarian dan judul baru lebih cepat). PENTING: kunci tanda tangan diganti, hapus app lama lalu pasang APK ini secara manual."
 }
