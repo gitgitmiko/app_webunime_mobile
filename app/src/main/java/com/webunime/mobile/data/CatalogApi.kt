@@ -4,15 +4,15 @@ import android.content.Context
 
 /**
  * Facade tipis: signature method tetap untuk screens,
- * implementasi dari [CatalogRepository] (JSON GitHub + cache).
+ * implementasi dari [CatalogRepository] (REST API WEBUNIME, fallback JSON GitHub).
  */
 class CatalogApi(
     context: Context,
-    baseUrl: String = CatalogRepository.DEFAULT_GITHUB_RAW,
+    baseUrl: String = CatalogRepository.DEFAULT_API_BASE,
 ) {
     private val repo = CatalogRepository(
         context = context.applicationContext,
-        githubRawBase = baseUrl,
+        apiBase = baseUrl,
     )
 
     suspend fun home(): HomeResponse = repo.home()

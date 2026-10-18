@@ -16,13 +16,13 @@ android {
         applicationId = "com.webunime.mobile"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.3.10"
+        versionCode = 14
+        versionName = "0.4.0"
 
         buildConfigField(
             "String",
             "CATALOG_API_BASE",
-            "\"https://raw.githubusercontent.com/gitgitmiko/WEBUNIME/main/public/data/mobile/\"",
+            "\"https://gitgitmiko.my.id/api/v1/\"",
         )
         // Ganti dengan Web client ID dari Firebase Console (OAuth 2.0).
         buildConfigField(

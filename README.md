@@ -4,7 +4,7 @@ App Android HP (Jetpack Compose) + ekonomi Fase 1.
 
 ## API katalog
 
-https://webunime-catalog-api.vercel.app
+https://gitgitmiko.my.id/api/v1/ (REST API + MySQL; fallback JSON GitHub bila API tidak terjangkau)
 
 ## Fitur Fase 1
 

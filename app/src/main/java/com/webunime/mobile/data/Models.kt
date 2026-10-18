@@ -49,8 +49,15 @@ data class AnimeCard(
     val genre: List<String>? = null,
     val episodes_count: Int? = null,
     val catalog: String? = null,
+    val thumbnail_landscape: String? = null,
 ) {
     fun displayTitle(): String = judul ?: nama ?: slug ?: "Tanpa judul"
+
+    /** Poster yang bisa dimuat Coil; fallback ke landscape bila thumbnail rusak. */
+    fun withResolvedThumbnail(catalog: String? = this.catalog): AnimeCard {
+        val poster = PosterUrls.resolve(thumbnail, thumbnail_landscape) ?: thumbnail
+        return copy(thumbnail = poster, catalog = catalog)
+    }
 }
 
 @JsonClass(generateAdapter = false)
