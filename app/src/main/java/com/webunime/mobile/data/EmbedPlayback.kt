@@ -26,6 +26,22 @@ object EmbedPlayback {
             (u.contains("wibufile") && u.contains("/embed"))
     }
 
+    /** YourUpload (server "Anoboy YUP"): JWPlayer dengan tinggi tetap → diputar native. */
+    fun isYourUploadEmbed(url: String): Boolean {
+        val u = url.lowercase()
+        return u.contains("yourupload.com/embed/") || u.contains("yourupload.com/watch/")
+    }
+
+    /** Embed yang MP4-nya bisa diambil lalu diputar ExoPlayer. */
+    fun canResolveDirect(url: String): Boolean = isWibufileEmbed(url) || isYourUploadEmbed(url)
+
+    /** Header yang diwajibkan CDN saat ExoPlayer memutar MP4 hasil [resolveDirectMedia]. */
+    fun mediaHeaders(sourceUrl: String): Map<String, String> = when {
+        // vidcache menolak (HTTP 500) tanpa Referer YourUpload.
+        isYourUploadEmbed(sourceUrl) -> mapOf("Referer" to YOURUPLOAD_REFERER)
+        else -> emptyMap()
+    }
+
     /** Embed yang wajib di dalam iframe (bukan loadUrl top-level). */
     fun needsIframeWrapper(url: String): Boolean = isWibufileEmbed(url)
 
@@ -60,16 +76,22 @@ object EmbedPlayback {
     }
 
     /**
-     * Ambil MP4 dari halaman embed Wibufile (JWPlayer) agar bisa ExoPlayer.
-     * Gagal → null (fallback iframe wrapper).
+     * Ambil MP4 dari halaman embed Wibufile / YourUpload (JWPlayer) agar bisa ExoPlayer.
+     * Gagal → null (fallback halaman embed di WebView).
      */
     suspend fun resolveDirectMedia(url: String): String? = withContext(Dispatchers.IO) {
-        if (!isWibufileEmbed(url)) return@withContext null
         runCatching {
-            val html = fetch(url, referer = "https://api.wibufile.com/")
-            extractMp4(html)
+            when {
+                isWibufileEmbed(url) -> extractMp4(fetch(url, referer = "https://api.wibufile.com/"))
+                isYourUploadEmbed(url) -> extractMp4(
+                    fetch(url.replace("/watch/", "/embed/"), referer = YOURUPLOAD_REFERER),
+                )
+                else -> null
+            }
         }.getOrNull()
     }
+
+    private const val YOURUPLOAD_REFERER = "https://www.yourupload.com/"
 
     private fun fetch(url: String, referer: String): String {
         val req = Request.Builder()

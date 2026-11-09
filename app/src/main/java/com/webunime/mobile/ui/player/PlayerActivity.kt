@@ -88,7 +88,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -753,15 +755,15 @@ private fun PlayerInfoPanel(
 private fun PlaybackSurface(url: String, sync: PlayerSync) {
     val context = LocalContext.current
     var playUrl by remember { mutableStateOf(url) }
-    var resolving by remember { mutableStateOf(EmbedPlayback.isWibufileEmbed(url)) }
+    var resolving by remember { mutableStateOf(EmbedPlayback.canResolveDirect(url)) }
     val viewer = sync.role == RoomRole.Viewer
 
     LaunchedEffect(url) {
         sync.onNewMedia()
-        resolving = EmbedPlayback.isWibufileEmbed(url)
+        resolving = EmbedPlayback.canResolveDirect(url)
         val mapped = FilmEmbed.mapLegacyIframe(url)
         playUrl = mapped ?: url
-        if (EmbedPlayback.isWibufileEmbed(url)) {
+        if (EmbedPlayback.canResolveDirect(url)) {
             val mp4 = EmbedPlayback.resolveDirectMedia(url)
             if (!mp4.isNullOrBlank()) playUrl = mp4
             resolving = false
@@ -778,6 +780,7 @@ private fun PlaybackSurface(url: String, sync: PlayerSync) {
     }
 
     val direct = remember(playUrl) { PlayerRouter.isDirectMedia(playUrl) }
+    val sourceUrl by rememberUpdatedState(url)
     val useIframe = remember(playUrl) {
         !direct && EmbedPlayback.needsIframeWrapper(playUrl)
     }
@@ -791,7 +794,12 @@ private fun PlaybackSurface(url: String, sync: PlayerSync) {
         LaunchedEffect(playUrl) {
             val current = player.currentMediaItem?.localConfiguration?.uri?.toString()
             if (current == playUrl) return@LaunchedEffect
-            player.setMediaItem(MediaItem.fromUri(playUrl))
+            val http = DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+                .setDefaultRequestProperties(EmbedPlayback.mediaHeaders(sourceUrl))
+            player.setMediaSource(
+                DefaultMediaSourceFactory(http).createMediaSource(MediaItem.fromUri(playUrl)),
+            )
             player.prepare()
             player.playWhenReady = true
         }
@@ -839,7 +847,15 @@ private fun PlaybackSurface(url: String, sync: PlayerSync) {
         Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
-                WebView(ctx).apply {
+                object : WebView(ctx) {
+                    // Halaman JWPlayer (mis. YourUpload) memakai tinggi tetap saat dimuat:
+                    // sesuaikan lagi setelah rotasi / fullscreen supaya video tidak terpotong.
+                    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+                        super.onSizeChanged(w, h, ow, oh)
+                        if (ow == 0 || oh == 0) return
+                        postDelayed({ evaluateJavascript(JW_RESIZE_JS, null) }, 300)
+                    }
+                }.apply {
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1053,6 +1069,10 @@ private fun PlaybackSurface(url: String, sync: PlayerSync) {
         }
     }
 }
+
+private const val JW_RESIZE_JS =
+    "try{if(typeof jwplayer==='function'){var p=jwplayer();" +
+        "if(p&&p.resize)p.resize('100%',window.innerHeight)}}catch(e){}"
 
 @Composable
 private fun FilmNativeControls(
