@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.4.1",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.4.1/Weeboonime-v0.4.1.apk",
-  "changelog": "Baris anime dan film kini terus memuat judul berikutnya saat digeser sampai mentok. Katalog sepenuhnya dari server."
+  "versionCode": 16,
+  "versionName": "0.5.0",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.5.0/Weeboonime-v0.5.0.apk",
+  "changelog": "Login akun WEBUNIME (sama dengan web) dan Nonton Bareng: buat ruang dari pemutar atau gabung dengan kode, video ikut host."
 }
