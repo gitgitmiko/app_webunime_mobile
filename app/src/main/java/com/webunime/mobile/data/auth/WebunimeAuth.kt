@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,14 +75,23 @@ class WebunimeAuth(
     @Volatile
     private var token: String? = null
 
+    private val restored = CompletableDeferred<Unit>()
+
     val isSignedIn: Boolean get() = token != null && _user.value != null
 
     /** Muat sesi tersimpan lalu cek ke server; 401 → sesi dibuang. */
     suspend fun restore() {
-        val saved = store.data.map { it[KEY_TOKEN] }.first() ?: return
-        token = saved
-        runCatching { refresh() }
+        try {
+            val saved = store.data.map { it[KEY_TOKEN] }.first() ?: return
+            token = saved
+            runCatching { refresh() }
+        } finally {
+            restored.complete(Unit)
+        }
     }
+
+    /** Tunggu [restore] selesai (worker latar belakang start bersamaan dengan app). */
+    suspend fun awaitRestored() = restored.await()
 
     suspend fun refresh(): WebUser? {
         if (token == null) return null
@@ -136,6 +146,18 @@ class WebunimeAuth(
         token?.let { header("Authorization", "Bearer $it") }
         header("User-Agent", USER_AGENT)
         header("Accept", "application/json")
+    }
+
+    /** Request API berakun (nonton bareng, favorit); 401 → sesi dibuang. */
+    suspend fun send(builder: Request.Builder): String = withContext(Dispatchers.IO) {
+        client.newCall(authorize(builder).build()).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                if (response.code == 401) clearSession()
+                throw WebunimeApiException(response.code, errorMessage(response, body))
+            }
+            body
+        }
     }
 
     /** Pesan error server (`{"error": "..."}`) atau fallback. */

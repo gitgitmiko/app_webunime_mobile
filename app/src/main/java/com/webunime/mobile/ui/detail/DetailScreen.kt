@@ -1,6 +1,12 @@
 ﻿package com.webunime.mobile.ui.detail
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -42,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,11 +65,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.webunime.mobile.WebunimeApp
 import com.webunime.mobile.data.AnimeDetail
 import com.webunime.mobile.data.EpisodeSummary
 import com.webunime.mobile.data.SeasonGroup
+import com.webunime.mobile.ui.account.AuthDialog
 import com.webunime.mobile.ui.components.MetaChip
 import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.components.SimpleDropdown
@@ -89,6 +100,66 @@ fun DetailScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var selectedBySeason by remember { mutableStateOf<Map<String, EpisodeSummary>>(emptyMap()) }
+
+    // Favorit akun WEBUNIME (sinkron dengan web) memakai koleksi asli di server.
+    var serverCollection by remember { mutableStateOf<String?>(null) }
+    val favorites by app.favorites.items.collectAsState()
+    val isFavorite = serverCollection?.let { col ->
+        favorites.any { it.collection == col && it.slug == slug.lowercase() }
+    } ?: false
+    var favBusy by remember { mutableStateOf(false) }
+    var askLogin by remember { mutableStateOf(false) }
+    val notifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* ditolak: favorit tetap tersimpan, notifikasi tetap ada di kotak notifikasi akun */ }
+
+    fun toggleFavorite() {
+        val col = serverCollection ?: return
+        if (app.webAuth.user.value == null) {
+            askLogin = true
+            return
+        }
+        if (favBusy) return
+        favBusy = true
+        scope.launch {
+            runCatching {
+                if (isFavorite) {
+                    app.favorites.remove(col, slug)
+                } else {
+                    val d = detail
+                    app.favorites.add(col, slug, d?.displayTitle(), d?.thumbnail)
+                    app.episodeAlerts.remember(col, slug, d?.episodes?.mapNotNull { it.episode }?.maxOrNull())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }.onSuccess {
+                Toast.makeText(
+                    context,
+                    if (isFavorite) "Dihapus dari favorit" else "Ditambahkan ke favorit",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }.onFailure {
+                Toast.makeText(context, it.message ?: "Gagal memperbarui favorit", Toast.LENGTH_SHORT).show()
+            }
+            favBusy = false
+        }
+    }
+
+    LaunchedEffect(slug, collection) {
+        serverCollection = runCatching { app.catalogApi.serverCollection(slug, collection) }.getOrNull()
+    }
+
+    if (askLogin) {
+        AuthDialog(
+            onDismiss = { askLogin = false },
+            onSignedIn = { toggleFavorite() },
+            lead = "Masuk untuk menyimpan favorit dan dapat notifikasi episode baru.",
+        )
+    }
 
     fun reload() {
         scope.launch {
@@ -141,6 +212,18 @@ fun DetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { toggleFavorite() },
+                        enabled = serverCollection != null && !favBusy,
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Hapus dari favorit" else "Tambah ke favorit",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

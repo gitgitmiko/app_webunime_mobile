@@ -3,14 +3,12 @@ package com.webunime.mobile.data.party
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import com.webunime.mobile.data.auth.WebunimeApiException
 import com.webunime.mobile.data.auth.WebunimeAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -182,16 +180,7 @@ class WatchPartyApi(private val auth: WebunimeAuth) {
     private fun parseRoom(body: String): RoomSnapshot =
         roomAdapter.fromJson(body)?.room ?: throw IOException("Respons ruang kosong")
 
-    private suspend fun send(builder: Request.Builder): String = withContext(Dispatchers.IO) {
-        auth.client.newCall(auth.authorize(builder).build()).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                if (response.code == 401) auth.clearSession()
-                throw WebunimeApiException(response.code, auth.errorMessage(response, body))
-            }
-            body
-        }
-    }
+    private suspend fun send(builder: Request.Builder): String = auth.send(builder)
 
     private fun url(vararg segments: String): HttpUrl =
         auth.origin.newBuilder().addPathSegments("api/v1/rooms").apply {

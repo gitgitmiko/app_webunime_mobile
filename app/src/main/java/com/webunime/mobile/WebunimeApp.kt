@@ -6,11 +6,15 @@ import com.webunime.mobile.data.ads.RewardedAdManager
 import com.webunime.mobile.data.auth.AuthRepository
 import com.webunime.mobile.data.auth.WebunimeAuth
 import com.webunime.mobile.data.billing.BillingRepository
+import com.webunime.mobile.data.library.EpisodeAlerts
+import com.webunime.mobile.data.library.FavoritesRepository
 import com.webunime.mobile.data.party.WatchPartyApi
 import com.webunime.mobile.data.user.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class WebunimeApp : Application() {
@@ -27,6 +31,10 @@ class WebunimeApp : Application() {
         private set
     lateinit var watchParty: WatchPartyApi
         private set
+    lateinit var favorites: FavoritesRepository
+        private set
+    lateinit var episodeAlerts: EpisodeAlerts
+        private set
     lateinit var rewardedAds: RewardedAdManager
         private set
     lateinit var billingRepository: BillingRepository
@@ -39,6 +47,8 @@ class WebunimeApp : Application() {
         authRepository = AuthRepository()
         webAuth = WebunimeAuth(this, BuildConfig.CATALOG_API_BASE)
         watchParty = WatchPartyApi(webAuth)
+        favorites = FavoritesRepository(webAuth)
+        episodeAlerts = EpisodeAlerts(this, webAuth, favorites, catalogApi)
         rewardedAds = RewardedAdManager(this)
         billingRepository = BillingRepository(this)
 
@@ -46,6 +56,20 @@ class WebunimeApp : Application() {
         billingRepository.start()
 
         appScope.launch { webAuth.restore() }
+        EpisodeAlerts.ensureChannel(this)
+        EpisodeAlerts.schedule(this)
+
+        // Ganti akun: muat favorit & kotak notifikasi akun itu, lalu cek episode baru.
+        appScope.launch {
+            webAuth.user.map { it?.id }.distinctUntilChanged().collect { uid ->
+                episodeAlerts.loadInbox()
+                if (uid == null) {
+                    favorites.clear()
+                } else {
+                    runCatching { episodeAlerts.check() }
+                }
+            }
+        }
 
         appScope.launch {
             userRepository.ensureBootstrapped()

@@ -129,6 +129,10 @@ class CatalogRepository(
 
     suspend fun calendar(): CalendarResponse = apiCall { calendarDoc() }
 
+    /** Koleksi asli di server (mis. judul "anime" bisa ada di anime-movies), untuk favorit. */
+    suspend fun serverCollection(slug: String, collection: String): String =
+        apiCall { locate(slug, collection)?.first ?: collection }
+
     suspend fun anime(slug: String, collection: String = "anime"): AnimeDetail =
         apiCall {
             val item = hydrate(slug, collection) ?: throw ApiNotFound("Judul tidak ditemukan: $slug")
@@ -254,7 +258,7 @@ class CatalogRepository(
         val key = slug.trim()
         if (key.isBlank()) return null
         val candidates = when (collection) {
-            "movies", "horror", "series" -> listOf(collection)
+            "movies", "horror", "series", "marvel", "indonesia" -> listOf(collection)
             else -> listOf("anime", "anime-movies")
         }
         for (name in candidates) {

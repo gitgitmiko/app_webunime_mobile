@@ -18,6 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +63,8 @@ fun HomeScreen(
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
     onChangeCatalog: () -> Unit,
     onOpenRooms: () -> Unit = {},
+    onOpenFavorites: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     if (catalogMode == "film") {
@@ -67,6 +73,8 @@ fun HomeScreen(
             onBack = onChangeCatalog,
             onOpenTitle = onOpenTitle,
             onOpenRooms = onOpenRooms,
+            onOpenFavorites = onOpenFavorites,
+            onOpenNotifications = onOpenNotifications,
         )
         return
     }
@@ -147,9 +155,11 @@ fun HomeScreen(
                                     modifier = Modifier.weight(1f),
                                 )
                                 RoomsButton(onOpenRooms)
+                                NotificationsButton(onOpenNotifications)
                             }
                         }
                         item { BrandHeader() }
+                        favoritesRow(anime = true, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
                         if (data.latest.isNotEmpty()) {
                             item { SectionTitle("Anime Terbaru") }
                             item {
@@ -221,6 +231,8 @@ private fun FilmCatalog(
     onBack: () -> Unit,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
     onOpenRooms: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onOpenNotifications: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
     val scope = rememberCoroutineScope()
@@ -290,8 +302,10 @@ private fun FilmCatalog(
                                 modifier = Modifier.weight(1f),
                             )
                             RoomsButton(onOpenRooms)
+                            NotificationsButton(onOpenNotifications)
                         }
                     }
+                    favoritesRow(anime = false, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
                     filmRow("Film Terbaru", moviesRow, "movies", onOpenTitle)
                     filmRow("Top Film", data.topMovies, "movies", onOpenTitle)
                     filmRow("Horor Terbaru", horrorRow, "horror", onOpenTitle)
@@ -380,6 +394,45 @@ private fun RoomsButton(onClick: () -> Unit) {
     TextButton(onClick = onClick) {
         Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
         Text("Nonton Bareng")
+    }
+}
+
+@Composable
+private fun NotificationsButton(onClick: () -> Unit) {
+    val app = LocalContext.current.applicationContext as WebunimeApp
+    val user by app.webAuth.user.collectAsState()
+    if (user == null) return
+    val unread = app.episodeAlerts.inbox.collectAsState().value.count { !it.read }
+    IconButton(onClick = onClick) {
+        BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 9) "9+" else "$unread") } }) {
+            Icon(Icons.Default.Notifications, contentDescription = "Notifikasi")
+        }
+    }
+}
+
+/** Baris "Favorit Saya" (akun yang masuk saja), dipisah per katalog anime / film. */
+private fun androidx.compose.foundation.lazy.LazyListScope.favoritesRow(
+    anime: Boolean,
+    onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
+    onSeeAll: () -> Unit,
+) {
+    item(key = "favorites-row") {
+        val app = LocalContext.current.applicationContext as WebunimeApp
+        val favorites by app.favorites.items.collectAsState()
+        val shown = favorites.filter { it.isAnimeCatalog() == anime }
+        if (shown.isEmpty()) return@item
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionTitle("Favorit Saya", modifier = Modifier.weight(1f))
+                TextButton(onClick = onSeeAll) { Text("Lihat semua") }
+            }
+            HorizontalPosterRow(
+                items = shown,
+                titleOf = { it.displayTitle() },
+                thumbOf = { it.thumbnail },
+                onClick = { fav -> onOpenTitle(fav.appCollection(), fav.slug, -1) },
+            )
+        }
     }
 }
 

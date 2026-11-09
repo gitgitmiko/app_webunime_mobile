@@ -1,5 +1,6 @@
 ﻿package com.webunime.mobile
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -46,6 +47,8 @@ import com.webunime.mobile.ui.calendar.CalendarScreen
 import com.webunime.mobile.ui.detail.DetailScreen
 import com.webunime.mobile.ui.home.CatalogChooserScreen
 import com.webunime.mobile.ui.home.HomeScreen
+import com.webunime.mobile.ui.library.FavoritesScreen
+import com.webunime.mobile.ui.library.NotificationsScreen
 import com.webunime.mobile.ui.party.RoomsScreen
 import com.webunime.mobile.ui.search.SearchScreen
 import com.webunime.mobile.ui.theme.WebunimeTheme
@@ -56,9 +59,31 @@ import kotlinx.coroutines.delay
 private const val HEARTBEAT_MS = 30_000L
 
 class MainActivity : ComponentActivity() {
+    /** Judul yang diminta dibuka dari notifikasi episode baru. */
+    private var pendingOpen by mutableStateOf<OpenRequest?>(null)
+
+    private data class OpenRequest(val collection: String, val slug: String, val episode: Int, val alertId: String?)
+
+    private fun readOpenRequest(intent: Intent?) {
+        val slug = intent?.getStringExtra(EXTRA_OPEN_SLUG)?.takeIf { it.isNotBlank() } ?: return
+        pendingOpen = OpenRequest(
+            collection = intent.getStringExtra(EXTRA_OPEN_COLLECTION) ?: "anime",
+            slug = slug,
+            episode = intent.getIntExtra(EXTRA_OPEN_EPISODE, -1),
+            alertId = intent.getStringExtra(EXTRA_ALERT_ID),
+        )
+        intent.removeExtra(EXTRA_OPEN_SLUG)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        readOpenRequest(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) readOpenRequest(intent)
         setContent {
             WebunimeTheme {
                 val nav = rememberNavController()
@@ -82,6 +107,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppUpdateHost(autoCheck = true, checkTrigger = updateCheckTrigger)
+
+                LaunchedEffect(pendingOpen) {
+                    val open = pendingOpen ?: return@LaunchedEffect
+                    pendingOpen = null
+                    val app = applicationContext as WebunimeApp
+                    open.alertId?.let(app.episodeAlerts::markRead)
+                    if (catalogMode == null) {
+                        catalogMode = if (open.collection == "anime") "anime" else "film"
+                        nav.navigate("home") {
+                            popUpTo("choose") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    openTitle(open.collection, open.slug, open.episode)
+                }
 
                 // Presence akun seperti web: heartbeat selama app terlihat.
                 val app = applicationContext as WebunimeApp
@@ -186,6 +226,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onChangeCatalog = { goChoose() },
                                 onOpenRooms = { nav.navigate("rooms") { launchSingleTop = true } },
+                                onOpenFavorites = { nav.navigate("favorites") { launchSingleTop = true } },
+                                onOpenNotifications = { nav.navigate("notifications") { launchSingleTop = true } },
                             )
                         }
                         composable("search") {
@@ -205,10 +247,24 @@ class MainActivity : ComponentActivity() {
                             AccountScreen(
                                 onCheckUpdate = { updateCheckTrigger++ },
                                 onOpenRooms = { nav.navigate("rooms") { launchSingleTop = true } },
+                                onOpenFavorites = { nav.navigate("favorites") { launchSingleTop = true } },
+                                onOpenNotifications = { nav.navigate("notifications") { launchSingleTop = true } },
                             )
                         }
                         composable("rooms") {
                             RoomsScreen(onBack = { nav.popBackStack() })
+                        }
+                        composable("favorites") {
+                            FavoritesScreen(
+                                onBack = { nav.popBackStack() },
+                                onOpenTitle = { collection, slug, episode -> openTitle(collection, slug, episode) },
+                            )
+                        }
+                        composable("notifications") {
+                            NotificationsScreen(
+                                onBack = { nav.popBackStack() },
+                                onOpenTitle = { collection, slug, episode -> openTitle(collection, slug, episode) },
+                            )
                         }
                         composable(
                             route = "detail/{collection}/{slug}?ep={ep}",
@@ -235,5 +291,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_COLLECTION = "open_collection"
+        const val EXTRA_OPEN_SLUG = "open_slug"
+        const val EXTRA_OPEN_EPISODE = "open_episode"
+        const val EXTRA_ALERT_ID = "alert_id"
     }
 }

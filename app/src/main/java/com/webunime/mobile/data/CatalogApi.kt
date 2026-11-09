@@ -24,6 +24,9 @@ class CatalogApi(
 
     suspend fun calendar(): CalendarResponse = repo.calendar()
 
+    suspend fun serverCollection(slug: String, collection: String): String =
+        repo.serverCollection(slug, collection)
+
     suspend fun anime(slug: String, collection: String = "anime"): AnimeDetail =
         repo.anime(slug, collection)
 

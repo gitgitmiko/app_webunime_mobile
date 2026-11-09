@@ -45,6 +45,8 @@ fun AccountScreen(
     contentPadding: PaddingValues = PaddingValues(),
     onCheckUpdate: () -> Unit = {},
     onOpenRooms: () -> Unit = {},
+    onOpenFavorites: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
     val scope = rememberCoroutineScope()
@@ -126,6 +128,36 @@ fun AccountScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = MaterialTheme.shapes.medium,
                         ) { Text("Keluar") }
+                    }
+                }
+            }
+
+            if (user != null) {
+                Appear(delayMs = 50) {
+                    val favCount = app.favorites.items.collectAsState().value.size
+                    val unread = app.episodeAlerts.inbox.collectAsState().value.count { !it.read }
+                    SettingsCard {
+                        SectionTitle(
+                            "Favorit & Notifikasi",
+                            modifier = Modifier.padding(horizontal = 0.dp, vertical = 0.dp),
+                        )
+                        Text(
+                            "Episode baru dari anime dan series favorit akan muncul sebagai notifikasi.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = onOpenFavorites,
+                                modifier = Modifier.weight(1f),
+                                shape = MaterialTheme.shapes.medium,
+                            ) { Text("Favorit ($favCount)") }
+                            OutlinedButton(
+                                onClick = onOpenNotifications,
+                                modifier = Modifier.weight(1f),
+                                shape = MaterialTheme.shapes.medium,
+                            ) { Text(if (unread > 0) "Notifikasi ($unread)" else "Notifikasi") }
+                        }
                     }
                 }
             }
