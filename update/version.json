@@ -1,6 +1,6 @@
 {
-  "versionCode": 14,
-  "versionName": "0.4.0",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.4.0/Weeboonime-v0.4.0.apk",
-  "changelog": "Katalog kini dari server (pencarian dan judul baru lebih cepat). PENTING: kunci tanda tangan diganti, hapus app lama lalu pasang APK ini secara manual."
+  "versionCode": 15,
+  "versionName": "0.4.1",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.4.1/Weeboonime-v0.4.1.apk",
+  "changelog": "Baris anime dan film kini terus memuat judul berikutnya saat digeser sampai mentok. Katalog sepenuhnya dari server."
 }
