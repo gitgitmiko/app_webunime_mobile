@@ -205,9 +205,9 @@ class CatalogRepository(
 
     suspend fun episode(slug: String, n: Int, collection: String = "anime"): EpisodePlayback =
         apiCall {
-            val item = hydrate(slug, collection)
+            val (found, item) = locate(slug, collection)
                 ?: throw ApiNotFound("Judul tidak ditemukan: $slug")
-            val playback = item.playbackFor(n)
+            val playback = item.playbackFor(n).copy(collection = found)
             if (playback.episode?.players.isNullOrEmpty()) {
                 error("Tidak ada player untuk episode $n")
             }
@@ -243,7 +243,14 @@ class CatalogRepository(
         return doc.copy(today = doc.today?.takeIf { it.isNotBlank() } ?: deviceWeekday())
     }
 
-    private suspend fun hydrate(slug: String, collection: String = "anime"): CatalogAnimeItem? {
+    private suspend fun hydrate(slug: String, collection: String = "anime"): CatalogAnimeItem? =
+        locate(slug, collection)?.second
+
+    /** Item + koleksi tempat ia ditemukan (anime bisa ada di anime-movies). */
+    private suspend fun locate(
+        slug: String,
+        collection: String = "anime",
+    ): Pair<String, CatalogAnimeItem>? {
         val key = slug.trim()
         if (key.isBlank()) return null
         val candidates = when (collection) {
@@ -253,7 +260,7 @@ class CatalogRepository(
         for (name in candidates) {
             val cacheKey = "$name:${key.lowercase(Locale.ROOT)}"
             itemCache[cacheKey]?.let {
-                if (System.currentTimeMillis() - it.at < ITEM_TTL_MS) return it.item
+                if (System.currentTimeMillis() - it.at < ITEM_TTL_MS) return name to it.item
             }
             val item = try {
                 parse(itemAdapter, getBody(endpoint("catalog", name, key)))
@@ -262,7 +269,7 @@ class CatalogRepository(
             }
             val patched = item.withResolvedThumbnail()
             itemCache[cacheKey] = CachedItem(System.currentTimeMillis(), patched)
-            return patched
+            return name to patched
         }
         return null
     }

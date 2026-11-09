@@ -1,6 +1,7 @@
 ﻿package com.webunime.mobile.ui.player
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
@@ -16,6 +17,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -46,19 +49,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,12 +83,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.webunime.mobile.WebunimeApp
 import com.webunime.mobile.data.AnimeDetail
 import com.webunime.mobile.data.EmbedPlayback
@@ -89,6 +100,12 @@ import com.webunime.mobile.data.EpisodeSummary
 import com.webunime.mobile.data.PlayerRouter
 import com.webunime.mobile.data.PlayerServer
 import com.webunime.mobile.data.WebPlayerProxy
+import com.webunime.mobile.data.party.RoomRole
+import com.webunime.mobile.data.party.RoomSnapshot
+import com.webunime.mobile.data.party.WatchPartyApi
+import com.webunime.mobile.data.party.WatchPartySession
+import com.webunime.mobile.data.party.WatchSyncAgent
+import com.webunime.mobile.ui.account.AuthDialog
 import com.webunime.mobile.ui.components.MetaChip
 import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.components.SimpleDropdown
@@ -98,6 +115,9 @@ import com.webunime.mobile.ui.theme.WuBg
 import com.webunime.mobile.ui.theme.WuStroke
 import com.webunime.mobile.ui.theme.WuSurface
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 class PlayerActivity : ComponentActivity() {
 
@@ -105,10 +125,11 @@ class PlayerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
-        val slug = intent.getStringExtra(EXTRA_SLUG).orEmpty()
+        val startSlug = intent.getStringExtra(EXTRA_SLUG).orEmpty()
         val startEpisode = intent.getIntExtra(EXTRA_EPISODE, 1)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
-        val collection = intent.getStringExtra(EXTRA_COLLECTION)?.takeIf { it.isNotBlank() } ?: "anime"
+        val startCollection = intent.getStringExtra(EXTRA_COLLECTION)?.takeIf { it.isNotBlank() } ?: "anime"
+        val joinCode = intent.getStringExtra(EXTRA_ROOM_CODE)?.takeIf { it.isNotBlank() }
         val app = application as WebunimeApp
 
         setContent {
@@ -122,17 +143,158 @@ class PlayerActivity : ComponentActivity() {
                     onDispose { /* keep bars as-is until next apply */ }
                 }
 
+                // Penonton nonton bareng bisa dipindah host ke judul lain.
+                var slug by remember { mutableStateOf(startSlug) }
+                var collection by remember { mutableStateOf(startCollection) }
                 var episodes by remember { mutableStateOf<List<EpisodeSummary>>(emptyList()) }
                 var currentEpisode by remember { mutableIntStateOf(startEpisode) }
                 var players by remember { mutableStateOf<List<PlayerServer>>(emptyList()) }
-                var selectedServer by remember { mutableIntStateOf(0) }
+                var selectedUrl by remember { mutableStateOf<String?>(null) }
                 var loading by remember { mutableStateOf(true) }
                 var error by remember { mutableStateOf<String?>(null) }
                 var epTitle by remember { mutableStateOf(title) }
                 var animeTitle by remember { mutableStateOf(title) }
                 var animeDetail by remember { mutableStateOf<AnimeDetail?>(null) }
+                /** Slug episode & koleksi asli di server, untuk ruang nonton bareng. */
+                var episodeSlug by remember { mutableStateOf<String?>(null) }
+                var serverCollection by remember { mutableStateOf<String?>(null) }
+                /** Server yang diminta ruang (penonton) — dipilih begitu daftar server ada. */
+                var roomServerUrl by remember { mutableStateOf<String?>(null) }
+
+                val sync = remember { PlayerSync() }
+                var session by remember { mutableStateOf<WatchPartySession?>(null) }
+                val roomState by remember(session) { session?.state ?: flowOf(null) }
+                    .collectAsState(initial = session?.state?.value)
+                val isViewer = roomState?.role == RoomRole.Viewer
+                val isHost = roomState?.role == RoomRole.Host
+                var askLogin by remember { mutableStateOf(false) }
+                var afterLogin by remember { mutableStateOf<(() -> Unit)?>(null) }
+                var confirmEnd by remember { mutableStateOf(false) }
+                var partyBusy by remember { mutableStateOf(false) }
+                var roomNotice by remember { mutableStateOf<String?>(null) }
+
+                fun toast(text: String) {
+                    Toast.makeText(this@PlayerActivity, text, Toast.LENGTH_LONG).show()
+                }
+
+                fun enterRoom(snapshot: RoomSnapshot) {
+                    val me = app.webAuth.user.value ?: return
+                    session?.leave()
+                    val next = WatchPartySession(app.watchParty, snapshot, me.id, lifecycleScope)
+                    sync.role = next.state.value.role
+                    sync.onReport = { playing, time -> next.reportPlayback(playing, time) }
+                    if (next.isHost) sync.hostResume(snapshot.playback.time)
+                    session = next
+                    next.start()
+                }
+
+                fun leaveRoom() {
+                    session?.leave()
+                    session = null
+                    sync.leave()
+                }
+
+                fun requireLogin(action: () -> Unit) {
+                    if (app.webAuth.user.value != null) return action()
+                    afterLogin = action
+                    askLogin = true
+                }
+
+                fun startRoom() {
+                    if (partyBusy) return
+                    val pick = selectedUrl?.takeIf { WatchPartyApi.isSyncableServer(it) }
+                        ?: players.firstOrNull { WatchPartyApi.isSyncableServer(it.url) }?.url
+                    if (pick == null) {
+                        toast("Server judul ini tidak mendukung nonton bareng.")
+                        return
+                    }
+                    partyBusy = true
+                    lifecycleScope.launch {
+                        runCatching {
+                            app.watchParty.create(
+                                collection = serverCollection ?: collection,
+                                slug = slug,
+                                episodeSlug = episodeSlug,
+                                serverUrl = pick,
+                            )
+                        }
+                            .onSuccess { snapshot ->
+                                selectedUrl = pick
+                                enterRoom(snapshot)
+                                roomNotice = "Ruang dibuat. Bagikan kode ${snapshot.code} ke teman."
+                            }
+                            .onFailure { toast(it.message ?: "Gagal membuat ruang.") }
+                        partyBusy = false
+                    }
+                }
+
+                fun shareRoom() {
+                    val code = session?.code ?: return
+                    val link = WatchPartyApi.inviteLink(app.webAuth, code)
+                    val text = "Nonton bareng \"$animeTitle\" di WEBUNIME.\nKode ruang: $code\n$link"
+                    startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text),
+                            "Bagikan ruang",
+                        ),
+                    )
+                }
+
+                fun requestExit() {
+                    if (isHost) confirmEnd = true else finish()
+                }
+
+                BackHandler(enabled = isHost) { confirmEnd = true }
+
+                // Gabung lewat kode (dari daftar ruang).
+                LaunchedEffect(joinCode) {
+                    val code = joinCode ?: return@LaunchedEffect
+                    if (app.webAuth.user.value == null) askLogin = true
+                    app.webAuth.user.first { it != null }
+                    runCatching { app.watchParty.room(code) }
+                        .onSuccess { enterRoom(it) }
+                        .onFailure {
+                            loading = false
+                            error = it.message ?: "Gagal bergabung."
+                        }
+                }
+
+                // Penonton: ikuti judul/episode/server pilihan host.
+                LaunchedEffect(roomState?.media, isViewer) {
+                    val media = roomState?.media ?: return@LaunchedEffect
+                    // Host yang membuka ruangnya dari daftar juga mulai dari media ruang.
+                    if (!isViewer && slug.isNotBlank()) return@LaunchedEffect
+                    sync.onNewMedia()
+                    val sameEpisode = media.slug == slug && media.episodeSlug == episodeSlug && players.isNotEmpty()
+                    if (sameEpisode) {
+                        selectedUrl = media.serverUrl
+                        return@LaunchedEffect
+                    }
+                    loading = true
+                    error = null
+                    runCatching { app.catalogApi.anime(media.slug, media.collection) }
+                        .onSuccess { detail ->
+                            val eps = detail.episodes.sortedBy { it.episode ?: 0 }
+                            val n = eps.firstOrNull { it.slug == media.episodeSlug }?.episode
+                                ?: eps.firstOrNull()?.episode
+                                ?: 1
+                            roomServerUrl = media.serverUrl
+                            animeDetail = detail
+                            animeTitle = detail.displayTitle()
+                            episodes = eps
+                            slug = media.slug
+                            collection = if (media.collection == "anime-movies") "anime" else media.collection
+                            currentEpisode = n
+                        }
+                        .onFailure {
+                            loading = false
+                            error = it.message
+                        }
+                }
 
                 LaunchedEffect(slug, collection) {
+                    if (slug.isBlank()) return@LaunchedEffect
+                    if (isViewer && animeDetail != null && slug == roomState?.media?.slug) return@LaunchedEffect
                     runCatching { app.catalogApi.anime(slug, collection) }
                         .onSuccess { detail ->
                             animeDetail = detail
@@ -141,7 +303,10 @@ class PlayerActivity : ComponentActivity() {
                         }
                 }
 
-                LaunchedEffect(slug, collection, currentEpisode) {
+                LaunchedEffect(slug, collection, currentEpisode, joinCode == null || session != null) {
+                    if (slug.isBlank()) return@LaunchedEffect
+                    // Gabung ruang: tunggu media host dulu supaya tidak memutar episode lain.
+                    if (joinCode != null && session == null) return@LaunchedEffect
                     loading = true
                     error = null
                     runCatching { app.catalogApi.episode(slug, currentEpisode, collection) }
@@ -149,24 +314,129 @@ class PlayerActivity : ComponentActivity() {
                             epTitle = payload.episode?.title
                                 ?: payload.judul
                                 ?: animeTitle
+                            episodeSlug = payload.episode?.slug
+                            serverCollection = payload.collection
                             players = PlayerRouter.preferred(
                                 payload.episode?.players.orEmpty(),
                                 film = collection == "movies" ||
                                     collection == "horror" ||
                                     collection == "series",
                             )
-                            selectedServer = 0
+                            val keep = selectedUrl?.takeIf { url -> players.any { it.url == url } }
+                            selectedUrl = roomServerUrl?.takeIf { url -> players.any { it.url == url } }
+                                ?: keep.takeIf { session != null }
+                                ?: players.firstOrNull { session == null || WatchPartyApi.isSyncableServer(it.url) }?.url
+                                ?: players.firstOrNull()?.url
+                            roomServerUrl = null
                             if (players.isEmpty()) error = "Tidak ada server player"
                         }
                         .onFailure { error = it.message }
                     loading = false
                 }
 
+                // Host: ganti episode/server → kabari semua penonton.
+                LaunchedEffect(session, slug, episodeSlug, selectedUrl, loading) {
+                    val s = session ?: return@LaunchedEffect
+                    val url = selectedUrl ?: return@LaunchedEffect
+                    if (!s.isHost || loading) return@LaunchedEffect
+                    s.pushMedia(serverCollection ?: collection, slug, episodeSlug, url)
+                        .onSuccess { at ->
+                            if (at != null) sync.hostResume(at)
+                        }
+                        .onFailure { toast(it.message ?: "Gagal mengganti media ruang.") }
+                }
+
+                // Tick sinkron seperti web (1,5 detik) + tiap status ruang berubah.
+                LaunchedEffect(session) {
+                    val s = session ?: return@LaunchedEffect
+                    while (true) {
+                        sync.sync(s.state.value)
+                        delay(ROOM_TICK_MS)
+                    }
+                }
+                LaunchedEffect(roomState?.playback, roomState?.playbackAt) {
+                    roomState?.let(sync::sync)
+                }
+
+                LaunchedEffect(roomState?.closedReason) {
+                    val reason = roomState?.closedReason ?: return@LaunchedEffect
+                    val wasViewer = isViewer
+                    leaveRoom()
+                    when {
+                        reason == "auth" -> toast("Sesi login berakhir. Masuk lagi untuk nonton bareng.")
+                        reason == "replaced" -> toast("Ruang diganti dengan ruang baru.")
+                        wasViewer || reason != "ended" -> toast("Nonton bareng sudah berakhir.")
+                    }
+                    if (wasViewer) finish()
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose { session?.leave() }
+                }
+
+                if (askLogin) {
+                    AuthDialog(
+                        onDismiss = {
+                            askLogin = false
+                            afterLogin = null
+                            if (joinCode != null && app.webAuth.user.value == null) finish()
+                        },
+                        onSignedIn = {
+                            val action = afterLogin
+                            afterLogin = null
+                            action?.invoke()
+                        },
+                        lead = "Nonton bareng butuh akun WEBUNIME.",
+                    )
+                }
+
+                if (confirmEnd) {
+                    AlertDialog(
+                        onDismissRequest = { confirmEnd = false },
+                        title = { Text("Akhiri nonton bareng?") },
+                        text = { Text("Ruang akan ditutup untuk semua penonton.") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    confirmEnd = false
+                                    val s = session
+                                    leaveRoom()
+                                    lifecycleScope.launch { s?.end() }
+                                    finish()
+                                },
+                            ) { Text("Akhiri") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { confirmEnd = false }) { Text("Batal") }
+                        },
+                    )
+                }
+
+                roomNotice?.let { notice ->
+                    AlertDialog(
+                        onDismissRequest = { roomNotice = null },
+                        title = { Text("Nonton bareng") },
+                        text = { Text(notice) },
+                        confirmButton = {
+                            TextButton(onClick = { roomNotice = null; shareRoom() }) { Text("Bagikan") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { roomNotice = null }) { Text("Tutup") }
+                        },
+                    )
+                }
+
                 val isMovieCatalog =
                     collection == "movies" || collection == "horror"
                 val selectedEp = episodes.firstOrNull { it.episode == currentEpisode }
                     ?: episodes.firstOrNull()
-                val url = players.getOrNull(selectedServer)?.url.orEmpty()
+                val url = selectedUrl.orEmpty()
+                // Di ruang hanya server yang bisa disinkronkan (sama dengan web).
+                val shownPlayers = if (session != null) {
+                    players.filter { WatchPartyApi.isSyncableServer(it.url) }
+                } else {
+                    players
+                }
 
                 // Satu pohon Compose: player TIDAK di-if/else portrait↔landscape
                 // supaya ExoPlayer/WebView tidak di-dispose (video lanjut).
@@ -188,7 +458,7 @@ class PlayerActivity : ComponentActivity() {
                                     .padding(horizontal = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                IconButton(onClick = { finish() }) {
+                                IconButton(onClick = { requestExit() }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         null,
@@ -237,8 +507,28 @@ class PlayerActivity : ComponentActivity() {
                                     )
                                 error != null && players.isEmpty() ->
                                     Text(error ?: "", color = Color.White)
-                                url.isNotBlank() -> PlaybackSurface(url = url)
+                                url.isNotBlank() -> PlaybackSurface(url = url, sync = sync)
                             }
+                            roomState?.takeIf { isViewer && url.isNotBlank() }?.let { state ->
+                                ViewerLock(
+                                    state = state,
+                                    frameReady = sync.frameReady,
+                                    needsTap = sync.needsTap,
+                                    onTap = { if (sync.needsTap) sync.toggleMute() },
+                                )
+                            }
+                        }
+
+                        roomState?.let { state ->
+                            RoomBar(
+                                state = state,
+                                muted = sync.muted,
+                                compact = landscape,
+                                hostHint = isHost && !sync.frameReady && url.isNotBlank(),
+                                onShare = ::shareRoom,
+                                onMute = sync::toggleMute,
+                                onLeave = { requestExit() },
+                            )
                         }
 
                         if (!landscape) {
@@ -246,12 +536,16 @@ class PlayerActivity : ComponentActivity() {
                                 animeTitle = animeTitle,
                                 animeDetail = animeDetail,
                                 hideEpisodes = isMovieCatalog,
+                                locked = isViewer,
+                                inRoom = session != null,
+                                partyBusy = partyBusy,
                                 episodes = episodes,
                                 selectedEp = selectedEp,
-                                players = players,
-                                selectedServer = selectedServer,
+                                players = shownPlayers,
+                                selectedServer = shownPlayers.indexOfFirst { it.url == url },
                                 onSelectEpisode = { n -> currentEpisode = n },
-                                onSelectServer = { idx -> selectedServer = idx },
+                                onSelectServer = { idx -> selectedUrl = shownPlayers.getOrNull(idx)?.url },
+                                onStartParty = { requireLogin(::startRoom) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f),
@@ -272,7 +566,7 @@ class PlayerActivity : ComponentActivity() {
                             Icon(Icons.Default.FullscreenExit, "Keluar fullscreen", tint = Color.White)
                         }
                         IconButton(
-                            onClick = { finish() },
+                            onClick = { requestExit() },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .statusBarsPadding()
@@ -313,6 +607,9 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_EPISODE = "episode"
         const val EXTRA_TITLE = "title"
         const val EXTRA_COLLECTION = "collection"
+        /** Gabung ruang nonton bareng; judul & episode mengikuti host. */
+        const val EXTRA_ROOM_CODE = "room_code"
+        private const val ROOM_TICK_MS = 1_500L
     }
 }
 
@@ -329,6 +626,10 @@ private fun PlayerInfoPanel(
     onSelectEpisode: (Int) -> Unit,
     onSelectServer: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    locked: Boolean = false,
+    inRoom: Boolean = false,
+    partyBusy: Boolean = false,
+    onStartParty: () -> Unit = {},
 ) {
     Column(
         modifier
@@ -380,10 +681,25 @@ private fun PlayerInfoPanel(
                     modifier = Modifier.padding(horizontal = 0.dp),
                 )
                 Text(
-                    if (hideEpisodes) "Pilih server pemutar" else "Pilih episode dan server",
+                    when {
+                        locked -> "Episode dan server diatur oleh host"
+                        hideEpisodes -> "Pilih server pemutar"
+                        else -> "Pilih episode dan server"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (!inRoom) {
+                    OutlinedButton(
+                        onClick = onStartParty,
+                        enabled = !partyBusy && players.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Icon(Icons.Default.Groups, null, modifier = Modifier.padding(end = 8.dp))
+                        Text(if (partyBusy) "Membuat ruang…" else "Nonton bareng")
+                    }
+                }
                 if (!hideEpisodes && episodes.isNotEmpty()) {
                     SimpleDropdown(
                         label = "Episode",
@@ -394,6 +710,7 @@ private fun PlayerInfoPanel(
                             val n = ep.episode ?: return@SimpleDropdown
                             onSelectEpisode(n)
                         },
+                        enabled = !locked,
                     )
                 }
                 if (players.isNotEmpty()) {
@@ -406,6 +723,7 @@ private fun PlayerInfoPanel(
                             val idx = players.indexOf(server)
                             if (idx >= 0) onSelectServer(idx)
                         },
+                        enabled = !locked,
                     )
                 }
             }
@@ -432,12 +750,14 @@ private fun PlayerInfoPanel(
 }
 
 @Composable
-private fun PlaybackSurface(url: String) {
+private fun PlaybackSurface(url: String, sync: PlayerSync) {
     val context = LocalContext.current
     var playUrl by remember { mutableStateOf(url) }
     var resolving by remember { mutableStateOf(EmbedPlayback.isWibufileEmbed(url)) }
+    val viewer = sync.role == RoomRole.Viewer
 
     LaunchedEffect(url) {
+        sync.onNewMedia()
         resolving = EmbedPlayback.isWibufileEmbed(url)
         val mapped = FilmEmbed.mapLegacyIframe(url)
         playUrl = mapped ?: url
@@ -476,7 +796,11 @@ private fun PlaybackSurface(url: String) {
             player.playWhenReady = true
         }
         DisposableEffect(player) {
-            onDispose { player.release() }
+            sync.attach(player)
+            onDispose {
+                sync.detach(player)
+                player.release()
+            }
         }
         AndroidView(
             factory = { ctx ->
@@ -491,6 +815,8 @@ private fun PlaybackSurface(url: String) {
             },
             update = { view ->
                 if (view.player !== player) view.player = player
+                // Penonton nonton bareng: kontrol dikunci, host yang mengendalikan.
+                view.useController = !viewer
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -575,6 +901,12 @@ private fun PlaybackSurface(url: String) {
                         ),
                         "WebunimePlayback",
                     )
+                    addJavascriptInterface(sync.bridge, WatchSyncAgent.BRIDGE)
+                    // Agen nonton bareng di semua frame (embed bersarang); diam di luar ruang.
+                    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                        WebViewCompat.addDocumentStartJavaScript(this, WatchSyncAgent.SOURCE, setOf("*"))
+                    }
+                    sync.attach(this)
                     tag = ""
                     webViewRef = this
                 }
@@ -648,13 +980,14 @@ private fun PlaybackSurface(url: String) {
                 }
             },
             onRelease = { webView ->
+                sync.detach(webView)
                 webViewRef = null
                 webView.stopLoading()
                 webView.destroy()
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (filmWeb) {
+        if (filmWeb && !viewer) {
             var controlsVisible by remember(playUrl) { mutableStateOf(true) }
             var controlsEpoch by remember(playUrl) { mutableIntStateOf(0) }
             fun revealControls() {

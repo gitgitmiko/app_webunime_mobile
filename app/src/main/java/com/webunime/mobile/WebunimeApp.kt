@@ -4,7 +4,9 @@ import android.app.Application
 import com.webunime.mobile.data.CatalogApi
 import com.webunime.mobile.data.ads.RewardedAdManager
 import com.webunime.mobile.data.auth.AuthRepository
+import com.webunime.mobile.data.auth.WebunimeAuth
 import com.webunime.mobile.data.billing.BillingRepository
+import com.webunime.mobile.data.party.WatchPartyApi
 import com.webunime.mobile.data.user.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +22,11 @@ class WebunimeApp : Application() {
         private set
     lateinit var authRepository: AuthRepository
         private set
+    /** Akun WEBUNIME (sama dengan web). */
+    lateinit var webAuth: WebunimeAuth
+        private set
+    lateinit var watchParty: WatchPartyApi
+        private set
     lateinit var rewardedAds: RewardedAdManager
         private set
     lateinit var billingRepository: BillingRepository
@@ -30,11 +37,15 @@ class WebunimeApp : Application() {
         catalogApi = CatalogApi(BuildConfig.CATALOG_API_BASE)
         userRepository = UserRepository(this)
         authRepository = AuthRepository()
+        webAuth = WebunimeAuth(this, BuildConfig.CATALOG_API_BASE)
+        watchParty = WatchPartyApi(webAuth)
         rewardedAds = RewardedAdManager(this)
         billingRepository = BillingRepository(this)
 
         rewardedAds.init()
         billingRepository.start()
+
+        appScope.launch { webAuth.restore() }
 
         appScope.launch {
             userRepository.ensureBootstrapped()

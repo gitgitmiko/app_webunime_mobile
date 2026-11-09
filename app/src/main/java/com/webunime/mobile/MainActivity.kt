@@ -22,6 +22,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +32,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,10 +46,14 @@ import com.webunime.mobile.ui.calendar.CalendarScreen
 import com.webunime.mobile.ui.detail.DetailScreen
 import com.webunime.mobile.ui.home.CatalogChooserScreen
 import com.webunime.mobile.ui.home.HomeScreen
+import com.webunime.mobile.ui.party.RoomsScreen
 import com.webunime.mobile.ui.search.SearchScreen
 import com.webunime.mobile.ui.theme.WebunimeTheme
 import com.webunime.mobile.ui.theme.WuSurface
 import com.webunime.mobile.ui.update.AppUpdateHost
+import kotlinx.coroutines.delay
+
+private const val HEARTBEAT_MS = 30_000L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +82,20 @@ class MainActivity : ComponentActivity() {
                 }
 
                 AppUpdateHost(autoCheck = true, checkTrigger = updateCheckTrigger)
+
+                // Presence akun seperti web: heartbeat selama app terlihat.
+                val app = applicationContext as WebunimeApp
+                val webUser by app.webAuth.user.collectAsState()
+                val lifecycle = LocalLifecycleOwner.current.lifecycle
+                LaunchedEffect(webUser?.id) {
+                    if (webUser == null) return@LaunchedEffect
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        while (true) {
+                            app.webAuth.heartbeat()
+                            delay(HEARTBEAT_MS)
+                        }
+                    }
+                }
 
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -162,6 +185,7 @@ class MainActivity : ComponentActivity() {
                                     openTitle(collection, slug, episode)
                                 },
                                 onChangeCatalog = { goChoose() },
+                                onOpenRooms = { nav.navigate("rooms") { launchSingleTop = true } },
                             )
                         }
                         composable("search") {
@@ -180,7 +204,11 @@ class MainActivity : ComponentActivity() {
                         composable("settings") {
                             AccountScreen(
                                 onCheckUpdate = { updateCheckTrigger++ },
+                                onOpenRooms = { nav.navigate("rooms") { launchSingleTop = true } },
                             )
+                        }
+                        composable("rooms") {
+                            RoomsScreen(onBack = { nav.popBackStack() })
                         }
                         composable(
                             route = "detail/{collection}/{slug}?ep={ep}",

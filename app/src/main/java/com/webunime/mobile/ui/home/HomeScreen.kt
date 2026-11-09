@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +58,7 @@ fun HomeScreen(
     onOpenAnime: (slug: String) -> Unit,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
     onChangeCatalog: () -> Unit,
+    onOpenRooms: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
 ) {
     if (catalogMode == "film") {
@@ -64,6 +66,7 @@ fun HomeScreen(
             contentPadding = contentPadding,
             onBack = onChangeCatalog,
             onOpenTitle = onOpenTitle,
+            onOpenRooms = onOpenRooms,
         )
         return
     }
@@ -141,7 +144,9 @@ fun HomeScreen(
                                     "Anime",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f),
                                 )
+                                RoomsButton(onOpenRooms)
                             }
                         }
                         item { BrandHeader() }
@@ -215,6 +220,7 @@ private fun FilmCatalog(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
+    onOpenRooms: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
     val scope = rememberCoroutineScope()
@@ -281,7 +287,9 @@ private fun FilmCatalog(
                                 "Film",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
                             )
+                            RoomsButton(onOpenRooms)
                         }
                     }
                     filmRow("Film Terbaru", moviesRow, "movies", onOpenTitle)
@@ -364,6 +372,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
             subtitleOf = ::ratingLabel,
             onClick = { openFilm(it, collection, onOpenTitle) },
         )
+    }
+}
+
+@Composable
+private fun RoomsButton(onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+        Text("Nonton Bareng")
     }
 }
 

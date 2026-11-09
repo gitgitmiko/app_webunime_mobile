@@ -163,6 +163,8 @@ data class EpisodePlayback(
     val judul: String? = null,
     val thumbnail: String? = null,
     val episode: EpisodePayload? = null,
+    /** Koleksi asli di server (mis. anime-movies), untuk ruang nonton bareng. */
+    val collection: String? = null,
 )
 
 @JsonClass(generateAdapter = false)
