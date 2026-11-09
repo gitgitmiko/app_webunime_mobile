@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "0.5.1",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.5.1/Weeboonime-v0.5.1.apk",
-  "changelog": "Video server Anoboy YUP tidak lagi terpotong saat fullscreen (kini pakai pemutar native)."
+  "versionCode": 18,
+  "versionName": "0.6.0",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.6.0/Weeboonime-v0.6.0.apk",
+  "changelog": "Favorit anime dan series (sinkron dengan web) plus notifikasi saat episode baru rilis."
 }
