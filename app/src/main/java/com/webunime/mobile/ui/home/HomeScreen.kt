@@ -37,11 +37,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.webunime.mobile.WebunimeApp
+import com.webunime.mobile.data.AnimeCard
 import com.webunime.mobile.data.FilmHome
 import com.webunime.mobile.data.HomeResponse
+import com.webunime.mobile.data.LatestItem
 import com.webunime.mobile.ui.components.BrandHeader
 import com.webunime.mobile.ui.components.HorizontalPosterRow
+import com.webunime.mobile.ui.components.PagedPosterRow
+import com.webunime.mobile.ui.components.PagedRowState
 import com.webunime.mobile.ui.components.SectionTitle
+import com.webunime.mobile.ui.components.rememberPagedRow
 import com.webunime.mobile.ui.theme.WuBg
 import com.webunime.mobile.ui.theme.WuSurface
 import kotlinx.coroutines.launch
@@ -113,6 +118,15 @@ fun HomeScreen(
                 }
                 else -> {
                     val data = home ?: return@AnimatedContent
+                    val latestRow = rememberPagedRow(data.latest, LatestItem::rowKey) {
+                        app.catalogApi.latestItemsPage("anime-latest", it)
+                    }
+                    val animeRow = rememberPagedRow(data.anime, AnimeCard::rowKey) {
+                        app.catalogApi.cardsPage("anime", it)
+                    }
+                    val moviesRow = rememberPagedRow(data.movies, AnimeCard::rowKey) {
+                        app.catalogApi.cardsPage("anime-movies", it)
+                    }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 28.dp),
@@ -134,8 +148,8 @@ fun HomeScreen(
                         if (data.latest.isNotEmpty()) {
                             item { SectionTitle("Anime Terbaru") }
                             item {
-                                HorizontalPosterRow(
-                                    items = data.latest,
+                                PagedPosterRow(
+                                    state = latestRow,
                                     titleOf = { it.displayTitle() },
                                     thumbOf = { it.thumbnail },
                                     subtitleOf = { it.episode?.let { e -> "Ep $e" } },
@@ -149,8 +163,8 @@ fun HomeScreen(
                         if (data.anime.isNotEmpty()) {
                             item { SectionTitle("Anime") }
                             item {
-                                HorizontalPosterRow(
-                                    items = data.anime,
+                                PagedPosterRow(
+                                    state = animeRow,
                                     titleOf = { it.displayTitle() },
                                     thumbOf = { it.thumbnail },
                                     subtitleOf = {
@@ -164,8 +178,8 @@ fun HomeScreen(
                         if (data.movies.isNotEmpty()) {
                             item { SectionTitle("Anime Movie") }
                             item {
-                                HorizontalPosterRow(
-                                    items = data.movies,
+                                PagedPosterRow(
+                                    state = moviesRow,
                                     titleOf = { it.displayTitle() },
                                     thumbOf = { it.thumbnail },
                                     subtitleOf = {
@@ -241,6 +255,18 @@ private fun FilmCatalog(
             }
             else -> {
                 val data = home ?: return@Box
+                val moviesRow = rememberPagedRow(data.latestMovies, AnimeCard::rowKey) {
+                    app.catalogApi.cardsPage("movies", it)
+                }
+                val horrorRow = rememberPagedRow(data.latestHorror, AnimeCard::rowKey) {
+                    app.catalogApi.cardsPage("horror", it)
+                }
+                val latestSeriesRow = rememberPagedRow(data.latestSeries, LatestItem::rowKey) {
+                    app.catalogApi.latestItemsPage("series-latest", it)
+                }
+                val seriesRow = rememberPagedRow(data.series, AnimeCard::rowKey) {
+                    app.catalogApi.cardsPage("series", it)
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 28.dp),
@@ -258,15 +284,15 @@ private fun FilmCatalog(
                             )
                         }
                     }
-                    filmRow("Film Terbaru", data.latestMovies, "movies", onOpenTitle)
+                    filmRow("Film Terbaru", moviesRow, "movies", onOpenTitle)
                     filmRow("Top Film", data.topMovies, "movies", onOpenTitle)
-                    filmRow("Horor Terbaru", data.latestHorror, "horror", onOpenTitle)
+                    filmRow("Horor Terbaru", horrorRow, "horror", onOpenTitle)
                     filmRow("Top Horor", data.topHorror, "horror", onOpenTitle)
                     if (data.latestSeries.isNotEmpty()) {
                         item { SectionTitle("Series Terbaru") }
                         item {
-                            HorizontalPosterRow(
-                                items = data.latestSeries,
+                            PagedPosterRow(
+                                state = latestSeriesRow,
                                 titleOf = { it.displayTitle() },
                                 thumbOf = { it.thumbnail },
                                 subtitleOf = { item ->
@@ -281,7 +307,7 @@ private fun FilmCatalog(
                             )
                         }
                     }
-                    filmRow("Series", data.series, "series", onOpenTitle)
+                    filmRow("Series", seriesRow, "series", onOpenTitle)
                     if (
                         data.latestMovies.isEmpty() &&
                         data.latestHorror.isEmpty() &&
@@ -304,7 +330,7 @@ private fun FilmCatalog(
 
 private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
     title: String,
-    items: List<com.webunime.mobile.data.AnimeCard>,
+    items: List<AnimeCard>,
     collection: String,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
 ) {
@@ -315,13 +341,44 @@ private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
             items = items,
             titleOf = { it.displayTitle() },
             thumbOf = { it.thumbnail },
-            subtitleOf = { card ->
-                card.rating?.takeIf { it.isNotBlank() }?.let { "\u2605 $it" }
-            },
-            onClick = { card ->
-                val slug = card.slug?.takeIf { it.isNotBlank() } ?: return@HorizontalPosterRow
-                onOpenTitle(collection, slug, -1)
-            },
+            subtitleOf = ::ratingLabel,
+            onClick = { openFilm(it, collection, onOpenTitle) },
         )
     }
 }
+
+/** Baris film yang memuat page berikutnya setiap kali digeser sampai mentok. */
+private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
+    title: String,
+    row: PagedRowState<AnimeCard>,
+    collection: String,
+    onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
+) {
+    if (row.items.isEmpty()) return
+    item { SectionTitle(title) }
+    item {
+        PagedPosterRow(
+            state = row,
+            titleOf = { it.displayTitle() },
+            thumbOf = { it.thumbnail },
+            subtitleOf = ::ratingLabel,
+            onClick = { openFilm(it, collection, onOpenTitle) },
+        )
+    }
+}
+
+private fun ratingLabel(card: AnimeCard): String? =
+    card.rating?.takeIf { it.isNotBlank() }?.let { "\u2605 $it" }
+
+private fun openFilm(
+    card: AnimeCard,
+    collection: String,
+    onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
+) {
+    val slug = card.slug?.takeIf { it.isNotBlank() } ?: return
+    onOpenTitle(collection, slug, -1)
+}
+
+private fun AnimeCard.rowKey(): String = slug?.takeIf { it.isNotBlank() } ?: displayTitle()
+
+private fun LatestItem.rowKey(): String = "${catalogSlug()}#${episode ?: ""}#${displayTitle()}"

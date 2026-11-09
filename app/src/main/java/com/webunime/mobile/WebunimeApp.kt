@@ -27,7 +27,7 @@ class WebunimeApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        catalogApi = CatalogApi(this, BuildConfig.CATALOG_API_BASE)
+        catalogApi = CatalogApi(BuildConfig.CATALOG_API_BASE)
         userRepository = UserRepository(this)
         authRepository = AuthRepository()
         rewardedAds = RewardedAdManager(this)

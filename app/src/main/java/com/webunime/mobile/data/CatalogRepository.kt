@@ -1,6 +1,5 @@
 package com.webunime.mobile.data
 
-import android.content.Context
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -21,13 +20,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Katalog dari REST API WEBUNIME (`/api/v1`, MySQL di server).
- * Bila API tidak terjangkau (jaringan / 5xx), jatuh ke [JsonCatalogRepository]
- * (JSON GitHub + cache + seed assets).
  */
 class CatalogRepository(
-    context: Context,
     apiBase: String = DEFAULT_API_BASE,
-    private val fallback: JsonCatalogRepository = JsonCatalogRepository(context.applicationContext),
 ) {
     private val baseUrl: HttpUrl = apiBase.trimEnd('/').plus("/").toHttpUrl()
 
@@ -51,32 +46,32 @@ class CatalogRepository(
 
     private val itemCache = ConcurrentHashMap<String, CachedItem>()
 
-    /** API tidak terjangkau: jatuh ke fallback JSON. */
+    /** API tidak terjangkau (jaringan / 5xx / JSON rusak). */
     private class ApiUnavailable(cause: Throwable?) : Exception(cause)
 
-    /** API menjawab 404: judul memang tidak ada, jangan fallback. */
+    /** API menjawab 404: judul memang tidak ada. */
     private class ApiNotFound(message: String) : Exception(message)
 
-    suspend fun home(): HomeResponse = withFallback({
+    suspend fun home(): HomeResponse = apiCall {
         coroutineScope {
             val latest = async { latestPage("anime-latest", HOME_ROW_LIMIT) }
-            val anime = async { cardPage("anime", limit = HOME_ANIME_LIMIT) }
-            val movies = async { cardPage("anime-movies", limit = MOVIES_LIMIT) }
+            val anime = async { cardPage("anime", limit = pageSizeFor("anime")) }
+            val movies = async { cardPage("anime-movies", limit = pageSizeFor("anime-movies")) }
             val schedule = async { calendarDoc() }
             val cal = schedule.await()
             HomeResponse(
                 updatedAt = cal.scraped_at,
-                latest = latest.await(),
-                anime = anime.await().map { it.withResolvedThumbnail("anime") },
-                movies = movies.await().map { it.withResolvedThumbnail("anime") },
+                latest = latest.await().items,
+                anime = anime.await().items.map { it.withResolvedThumbnail("anime") },
+                movies = movies.await().items.map { it.withResolvedThumbnail("anime") },
                 scheduleToday = cal.days.firstOrNull {
                     it.day.equals(cal.today, ignoreCase = true)
                 },
             )
         }
-    }, { fallback.home() })
+    }
 
-    suspend fun filmHome(): FilmHome = withFallback({
+    suspend fun filmHome(): FilmHome = apiCall {
         coroutineScope {
             val movies = async { cardPage("movies", limit = HOME_ROW_LIMIT) }
             val topMovies = async { cardPage("movies", limit = TOP_ROW_LIMIT, sort = "top_random") }
@@ -85,20 +80,20 @@ class CatalogRepository(
             val latestSeries = async { latestPage("series-latest", HOME_ROW_LIMIT) }
             val series = async { cardPage("series", limit = HOME_ROW_LIMIT) }
             FilmHome(
-                latestMovies = movies.await().map { it.withResolvedThumbnail("movies") },
-                topMovies = topMovies.await().map { it.withResolvedThumbnail("movies") },
-                latestHorror = horror.await().map { it.withResolvedThumbnail("horror") },
-                topHorror = topHorror.await().map { it.withResolvedThumbnail("horror") },
-                latestSeries = latestSeries.await(),
-                series = series.await().map { it.withResolvedThumbnail("series") },
+                latestMovies = movies.await().items.map { it.withResolvedThumbnail("movies") },
+                topMovies = topMovies.await().items.map { it.withResolvedThumbnail("movies") },
+                latestHorror = horror.await().items.map { it.withResolvedThumbnail("horror") },
+                topHorror = topHorror.await().items.map { it.withResolvedThumbnail("horror") },
+                latestSeries = latestSeries.await().items,
+                series = series.await().items.map { it.withResolvedThumbnail("series") },
             )
         }
-    }, { fallback.filmHome() })
+    }
 
     suspend fun search(q: String, limit: Int = 30, catalogMode: String = "anime"): SearchResponse {
         val query = q.trim()
         if (query.length < 2) return SearchResponse(q = q, count = 0, items = emptyList())
-        return withFallback({
+        return apiCall {
             val allowed = if (catalogMode == "film") FILM_COLLECTIONS else ANIME_COLLECTIONS
             val url = endpoint("search") {
                 addQueryParameter("q", query)
@@ -111,17 +106,34 @@ class CatalogRepository(
                 .distinctBy { "${it.catalog}:${it.slug?.lowercase(Locale.ROOT)}" }
                 .take(limit.coerceIn(1, 100))
             SearchResponse(q = q, count = items.size, items = items)
-        }, { fallback.search(q, limit, catalogMode) })
+        }
     }
 
-    suspend fun calendar(): CalendarResponse =
-        withFallback({ calendarDoc() }, { fallback.calendar() })
+    /**
+     * Halaman berikutnya untuk baris beranda yang digeser sampai mentok.
+     * Ukuran halaman sama dengan yang dipakai [home] / [filmHome], jadi page 2 menyambung.
+     */
+    suspend fun cardsPage(collection: String, page: Int): Paged<AnimeCard> = apiCall {
+        val res = cardPage(collection, limit = pageSizeFor(collection), page = page)
+        val thumbFallback = if (collection == "anime-movies") "anime" else collection
+        Paged(
+            items = res.items.map { it.withResolvedThumbnail(thumbFallback) },
+            hasMore = res.hasMore(page),
+        )
+    }
+
+    suspend fun latestItemsPage(collection: String, page: Int): Paged<LatestItem> = apiCall {
+        val res = latestPage(collection, limit = pageSizeFor(collection), page = page)
+        Paged(items = res.items, hasMore = res.hasMore(page))
+    }
+
+    suspend fun calendar(): CalendarResponse = apiCall { calendarDoc() }
 
     suspend fun anime(slug: String, collection: String = "anime"): AnimeDetail =
-        withFallback({
+        apiCall {
             val item = hydrate(slug, collection) ?: throw ApiNotFound("Judul tidak ditemukan: $slug")
             item.toDetail()
-        }, { fallback.anime(slug, collection) })
+        }
 
     /**
      * Season saat ini + related (S1/S2/…) untuk dropdown terpisah.
@@ -129,12 +141,12 @@ class CatalogRepository(
      */
     suspend fun seasonsFor(slug: String, collection: String = "anime"): List<SeasonGroup> {
         if (collection == "movies" || collection == "horror") return emptyList()
-        return withFallback({
+        return apiCall {
             if (collection == "series") {
                 val current = hydrate(slug, "series")
                     ?: throw ApiNotFound("Series tidak ditemukan: $slug")
                 val currentSlug = current.slug?.takeIf { it.isNotBlank() } ?: slug
-                return@withFallback listOf(
+                return@apiCall listOf(
                     SeasonGroup(
                         label = "Episode",
                         animeSlug = currentSlug,
@@ -188,11 +200,11 @@ class CatalogRepository(
                 compareBy<SeasonGroup> { SeasonLabels.sortKey(it.label) }
                     .thenBy { it.label },
             )
-        }, { fallback.seasonsFor(slug, collection) })
+        }
     }
 
     suspend fun episode(slug: String, n: Int, collection: String = "anime"): EpisodePlayback =
-        withFallback({
+        apiCall {
             val item = hydrate(slug, collection)
                 ?: throw ApiNotFound("Judul tidak ditemukan: $slug")
             val playback = item.playbackFor(n)
@@ -200,7 +212,7 @@ class CatalogRepository(
                 error("Tidak ada player untuk episode $n")
             }
             playback
-        }, { fallback.episode(slug, n, collection) })
+        }
 
     // --- API ---
 
@@ -208,17 +220,22 @@ class CatalogRepository(
         collection: String,
         limit: Int,
         sort: String? = null,
-    ): List<AnimeCard> {
+        page: Int = 1,
+    ): CardPage {
         val url = endpoint("catalog", collection) {
             addQueryParameter("limit", limit.toString())
+            if (page > 1) addQueryParameter("page", page.toString())
             if (sort != null) addQueryParameter("sort", sort)
         }
-        return parse(cardPageAdapter, getBody(url)).items
+        return parse(cardPageAdapter, getBody(url))
     }
 
-    private suspend fun latestPage(collection: String, limit: Int): List<LatestItem> {
-        val url = endpoint("catalog", collection) { addQueryParameter("limit", limit.toString()) }
-        return parse(latestPageAdapter, getBody(url)).items
+    private suspend fun latestPage(collection: String, limit: Int, page: Int = 1): LatestPage {
+        val url = endpoint("catalog", collection) {
+            addQueryParameter("limit", limit.toString())
+            if (page > 1) addQueryParameter("page", page.toString())
+        }
+        return parse(latestPageAdapter, getBody(url))
     }
 
     private suspend fun calendarDoc(): CalendarResponse {
@@ -287,15 +304,12 @@ class CatalogRepository(
             throw ApiUnavailable(e)
         }
 
-    private suspend fun <T> withFallback(
-        api: suspend () -> T,
-        legacy: suspend () -> T,
-    ): T = try {
-        api()
+    private suspend fun <T> apiCall(block: suspend () -> T): T = try {
+        block()
     } catch (e: CancellationException) {
         throw e
     } catch (e: ApiUnavailable) {
-        legacy()
+        throw IOException("Tidak bisa terhubung ke server WEBUNIME", e)
     } catch (e: ApiNotFound) {
         throw IllegalStateException(e.message, e)
     }
@@ -317,19 +331,39 @@ class CatalogRepository(
     companion object {
         const val DEFAULT_API_BASE = "https://gitgitmiko.my.id/api/v1/"
 
-        private const val HOME_ANIME_LIMIT = 24
         private const val HOME_ROW_LIMIT = 24
         private const val TOP_ROW_LIMIT = 10
         private const val MOVIES_LIMIT = 60
         private const val ITEM_TTL_MS = 10 * 60 * 1000L
+
+        private fun pageSizeFor(collection: String): Int =
+            if (collection == "anime-movies") MOVIES_LIMIT else HOME_ROW_LIMIT
 
         private val ANIME_COLLECTIONS = setOf("anime", "anime-movies")
         private val FILM_COLLECTIONS = setOf("movies", "horror", "series")
     }
 }
 
-@JsonClass(generateAdapter = false)
-internal data class CardPage(val items: List<AnimeCard> = emptyList())
+/** Satu halaman baris beranda; [hasMore] false bila sudah mentok di akhir katalog. */
+data class Paged<T>(val items: List<T>, val hasMore: Boolean)
 
 @JsonClass(generateAdapter = false)
-internal data class LatestPage(val items: List<LatestItem> = emptyList())
+internal data class CardPage(
+    val items: List<AnimeCard> = emptyList(),
+    val limit: Int? = null,
+    val total: Int? = null,
+) {
+    fun hasMore(page: Int): Boolean = pageHasMore(page, limit, total, items.size)
+}
+
+@JsonClass(generateAdapter = false)
+internal data class LatestPage(
+    val items: List<LatestItem> = emptyList(),
+    val limit: Int? = null,
+    val total: Int? = null,
+) {
+    fun hasMore(page: Int): Boolean = pageHasMore(page, limit, total, items.size)
+}
+
+private fun pageHasMore(page: Int, limit: Int?, total: Int?, count: Int): Boolean =
+    if (limit != null && total != null) page * limit < total else count > 0

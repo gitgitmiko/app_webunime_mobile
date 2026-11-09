@@ -4,7 +4,7 @@ App Android HP (Jetpack Compose) + ekonomi Fase 1.
 
 ## API katalog
 
-https://gitgitmiko.my.id/api/v1/ (REST API + MySQL; fallback JSON GitHub bila API tidak terjangkau)
+https://gitgitmiko.my.id/api/v1/ (REST API + MySQL)
 
 ## Fitur Fase 1
 

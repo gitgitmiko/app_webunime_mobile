@@ -23,12 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +50,8 @@ import coil.compose.AsyncImage
 import com.webunime.mobile.R
 import com.webunime.mobile.ui.theme.WuMotionShort
 import com.webunime.mobile.ui.theme.WuStroke
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
 @Composable
 fun SectionTitle(title: String, modifier: Modifier = Modifier) {
@@ -203,8 +210,25 @@ fun <T> HorizontalPosterRow(
     thumbOf: (T) -> String?,
     subtitleOf: (T) -> String? = { null },
     onClick: (T) -> Unit,
+    loadingMore: Boolean = false,
+    onReachEnd: (() -> Unit)? = null,
 ) {
+    val listState = rememberLazyListState()
+    if (onReachEnd != null) {
+        val reachEnd by rememberUpdatedState(onReachEnd)
+        LaunchedEffect(listState) {
+            snapshotFlow {
+                val info = listState.layoutInfo
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@snapshotFlow false
+                last >= info.totalItemsCount - 1 - REACH_END_PREFETCH
+            }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect { reachEnd() }
+        }
+    }
     LazyRow(
+        state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -219,5 +243,24 @@ fun <T> HorizontalPosterRow(
                 onClick = { onClick(item) },
             )
         }
+        if (loadingMore) {
+            item(key = "loading-more") {
+                Box(
+                    Modifier
+                        .width(64.dp)
+                        .height(186.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
     }
 }
+
+/** Mulai muat halaman berikutnya saat tinggal sekian kartu sebelum mentok. */
+private const val REACH_END_PREFETCH = 2

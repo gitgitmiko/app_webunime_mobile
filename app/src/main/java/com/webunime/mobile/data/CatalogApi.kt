@@ -1,23 +1,23 @@
 package com.webunime.mobile.data
 
-import android.content.Context
-
 /**
  * Facade tipis: signature method tetap untuk screens,
- * implementasi dari [CatalogRepository] (REST API WEBUNIME, fallback JSON GitHub).
+ * implementasi dari [CatalogRepository] (REST API WEBUNIME).
  */
 class CatalogApi(
-    context: Context,
     baseUrl: String = CatalogRepository.DEFAULT_API_BASE,
 ) {
-    private val repo = CatalogRepository(
-        context = context.applicationContext,
-        apiBase = baseUrl,
-    )
+    private val repo = CatalogRepository(apiBase = baseUrl)
 
     suspend fun home(): HomeResponse = repo.home()
 
     suspend fun filmHome(): FilmHome = repo.filmHome()
+
+    suspend fun cardsPage(collection: String, page: Int): Paged<AnimeCard> =
+        repo.cardsPage(collection, page)
+
+    suspend fun latestItemsPage(collection: String, page: Int): Paged<LatestItem> =
+        repo.latestItemsPage(collection, page)
 
     suspend fun search(q: String, limit: Int = 30, catalogMode: String = "anime"): SearchResponse =
         repo.search(q, limit, catalogMode)
