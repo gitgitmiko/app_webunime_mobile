@@ -75,11 +75,15 @@ import com.webunime.mobile.ui.theme.WuText
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.util.Calendar
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.style.TextOverflow
 import com.webunime.mobile.data.auth.WebUser
@@ -94,6 +98,9 @@ private val PosterGap = 10.dp
 fun CatalogChooserScreen(
     onPick: (String) -> Unit,
     contentPadding: PaddingValues = PaddingValues(),
+    onOpenFavorites: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
     val user by app.webAuth.user.collectAsState()
@@ -128,14 +135,14 @@ fun CatalogChooserScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BrandLogo(height = 34.dp, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.weight(1f))
-                AccountChip(user)
+                AccountChip(user, onOpenFavorites, onOpenNotifications, onOpenSettings)
             }
             Spacer(Modifier.height(120.dp))
 
             Appear {
                 Column {
                     Text(
-                        greeting() + (user?.label()?.let { ", $it" } ?: ""),
+                        greeting() + ", " + (user?.label() ?: "Tamu"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = WuMuted,
                     )
@@ -415,101 +422,233 @@ private fun FeatureTile(icon: ImageVector, title: String, subtitle: String, modi
     }
 }
 
-/** Pojok kanan atas: tombol Masuk untuk tamu, atau info akun yang sedang masuk. */
+/** Pojok kanan atas: tombol Masuk untuk tamu, atau avatar akun yang membuka lembar profil. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AccountChip(user: WebUser?) {
-    val app = LocalContext.current.applicationContext as WebunimeApp
-    val scope = rememberCoroutineScope()
+private fun AccountChip(
+    user: WebUser?,
+    onOpenFavorites: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     var authDialog by remember { mutableStateOf<Boolean?>(null) }
-    var menu by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf(false) }
     authDialog?.let { register -> AuthDialog(onDismiss = { authDialog = null }, initialRegister = register) }
 
     if (user == null) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Tamu",
-                color = WuMuted,
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .border(1.dp, WuStroke, CircleShape)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-            Row(
-                Modifier
-                    .clip(CircleShape)
-                    .background(WuAccent)
-                    .clickable { authDialog = false }
-                    .padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Masuk", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .background(WuAccent)
+                .clickable { authDialog = false }
+                .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Masuk", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         return
     }
 
-    Box {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { sheet = true },
+    ) {
+        UserAvatar(user, size = 44.dp)
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .size(13.dp)
+                .clip(CircleShape)
+                .background(WuBg)
+                .padding(2.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF22C55E)),
+        )
+    }
+
+    if (sheet) {
+        ModalBottomSheet(
+            onDismissRequest = { sheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = WuSurfaceHigh,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = WuStroke) },
+        ) {
+            ProfileSheet(
+                user = user,
+                onAction = { action ->
+                    sheet = false
+                    action()
+                },
+                onOpenFavorites = onOpenFavorites,
+                onOpenNotifications = onOpenNotifications,
+                onOpenSettings = onOpenSettings,
+            )
+        }
+    }
+}
+
+/** Avatar huruf awal dengan cincin gradien. */
+@Composable
+private fun UserAvatar(user: WebUser, size: Dp) {
+    val ring = Brush.sweepGradient(listOf(Color(0xFFE11D48), Color(0xFFF59E0B), Color(0xFF7C3AED), Color(0xFFE11D48)))
+    Box(
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(ring)
+            .padding(size * 0.06f)
+            .clip(CircleShape)
+            .background(WuBg)
+            .padding(size * 0.05f)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFF7C3AED)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            user.label().take(1).uppercase(),
+            color = Color.White,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = (size.value * 0.4f).sp,
+        )
+    }
+}
+
+@Composable
+private fun ProfileSheet(
+    user: WebUser,
+    onAction: (() -> Unit) -> Unit,
+    onOpenFavorites: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val app = LocalContext.current.applicationContext as WebunimeApp
+    val scope = rememberCoroutineScope()
+    val favorites by app.favorites.items.collectAsState()
+    val inbox by app.episodeAlerts.inbox.collectAsState()
+    val animeFav = favorites.count { it.isAnimeCatalog() }
+    val unread = inbox.count { !it.read }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        UserAvatar(user, size = 84.dp)
+        Spacer(Modifier.height(12.dp))
+        Text(user.label(), color = WuText, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        val handle = listOfNotNull(user.username?.let { "@$it" }, user.email).joinToString(" \u00b7 ")
+        if (handle.isNotBlank()) {
+            Text(handle, color = WuMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(10.dp))
         Row(
             Modifier
                 .clip(CircleShape)
-                .background(WuSurfaceHigh)
-                .border(1.dp, WuStroke, CircleShape)
-                .clickable { menu = true }
-                .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                .background(Color(0xFF22C55E).copy(alpha = 0.14f))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFF7C3AED)))),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    user.label().take(1).uppercase(),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(
-                    user.label(),
-                    color = WuText,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 120.dp),
-                )
-                user.username?.let {
-                    Text(
-                        "@$it",
-                        color = WuMuted,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 120.dp),
-                    )
-                }
-            }
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            user.email?.let {
-                DropdownMenuItem(text = { Text(it, color = WuMuted, fontSize = 12.sp) }, onClick = {}, enabled = false)
-            }
-            DropdownMenuItem(
-                text = { Text("Keluar") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
-                onClick = {
-                    menu = false
-                    scope.launch { app.webAuth.logout() }
-                },
+            Box(Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF22C55E)))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (user.isAdmin) "Admin \u00b7 Akun WEBUNIME" else "Akun WEBUNIME \u00b7 sinkron dengan web",
+                color = Color(0xFF86EFAC),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
             )
         }
+
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile("${favorites.size}", "Favorit", Modifier.weight(1f))
+            StatTile("$animeFav", "Anime", Modifier.weight(1f))
+            StatTile("${favorites.size - animeFav}", "Film & Series", Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(WuBg.copy(alpha = 0.6f)),
+        ) {
+            SheetRow(Icons.Filled.Favorite, "Favorit Saya", null) { onAction(onOpenFavorites) }
+            SheetRow(Icons.Filled.NotificationsActive, "Notifikasi", if (unread > 0) "$unread baru" else null) {
+                onAction(onOpenNotifications)
+            }
+            SheetRow(Icons.Filled.Settings, "Pengaturan", null) { onAction(onOpenSettings) }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .border(1.dp, WuAccent.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                .clickable { onAction { scope.launch { app.webAuth.logout() } } }
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Logout, null, tint = WuAccent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Keluar", color = WuAccent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun StatTile(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(WuBg.copy(alpha = 0.6f))
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(value, color = WuText, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        Text(label, color = WuMuted, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun SheetRow(icon: ImageVector, title: String, trailing: String?, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(WuAccent.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = WuAccent, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(title, color = WuText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        trailing?.let {
+            Text(
+                it,
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(WuAccent)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = WuMuted)
     }
 }

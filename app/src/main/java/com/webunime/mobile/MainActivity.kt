@@ -250,6 +250,9 @@ class MainActivity : ComponentActivity() {
                                         launchSingleTop = true
                                     }
                                 },
+                                onOpenFavorites = { nav.navigate("favorites") { launchSingleTop = true } },
+                                onOpenNotifications = { nav.navigate("notifications") { launchSingleTop = true } },
+                                onOpenSettings = { nav.navigate("settings") { launchSingleTop = true } },
                             )
                         }
                         composable("home") {
