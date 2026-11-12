@@ -1,6 +1,6 @@
 {
-  "versionCode": 18,
-  "versionName": "0.6.0",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.6.0/Weeboonime-v0.6.0.apk",
-  "changelog": "Favorit anime dan series (sinkron dengan web) plus notifikasi saat episode baru rilis."
+  "versionCode": 19,
+  "versionName": "0.7.0",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.7.0/Weeboonime-v0.7.0.apk",
+  "changelog": "Notifikasi push saat ada film, series, atau anime baru. Bisa diatur per jenis di Settings."
 }
