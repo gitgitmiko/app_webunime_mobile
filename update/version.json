@@ -1,6 +1,6 @@
 {
-  "versionCode": 22,
-  "versionName": "0.7.3",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.7.3/Weeboonime-v0.7.3.apk",
-  "changelog": "Tab Favorit di bawah, tombol masuk di halaman depan, dan notifikasi real-time saat anime/series favoritmu dapat episode baru."
+  "versionCode": 23,
+  "versionName": "0.7.4",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.7.4/Weeboonime-v0.7.4.apk",
+  "changelog": "Perbaikan notifikasi episode favorit."
 }
