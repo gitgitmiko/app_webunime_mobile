@@ -181,6 +181,8 @@ class EpisodeAlerts(
         title: String,
         thumbnail: String?,
         poster: Bitmap?,
+        /** Push tes dari server: tampilkan walau episodenya sudah pernah diberitahukan. */
+        force: Boolean = false,
     ) = mutex.withLock {
         val user = auth.user.value ?: return@withLock
         val fav = favorites.items.value.firstOrNull {
@@ -188,9 +190,11 @@ class EpisodeAlerts(
         } ?: return@withLock
         val k = key(collection, slug)
         val base = readBaseline(user.id)
-        if (base.has(k) && base.optInt(k) >= episode) return@withLock
-        base.put(k, episode)
-        prefs.edit().putString("base_${user.id}", base.toString()).apply()
+        if (!force) {
+            if (base.has(k) && base.optInt(k) >= episode) return@withLock
+            base.put(k, episode)
+            prefs.edit().putString("base_${user.id}", base.toString()).apply()
+        }
         val alert = EpisodeAlert(
             id = "$k#$episode",
             collection = collection,

@@ -168,6 +168,7 @@ class WebunimeMessagingService : FirebaseMessagingService() {
                 title = data["title"].orEmpty(),
                 thumbnail = data["image"],
                 poster = poster,
+                force = data["test"] == "1",
             )
         }
     }
