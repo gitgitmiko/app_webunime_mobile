@@ -1,6 +1,6 @@
 {
-  "versionCode": 23,
-  "versionName": "0.7.4",
-  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.7.4/Weeboonime-v0.7.4.apk",
-  "changelog": "Perbaikan notifikasi episode favorit."
+  "versionCode": 24,
+  "versionName": "0.7.5",
+  "apkUrl": "https://github.com/gitgitmiko/app_webunime_mobile/releases/download/v0.7.5/Weeboonime-v0.7.5.apk",
+  "changelog": "Tampilan akun baru: avatar di halaman depan dan lembar profil dengan statistik favorit."
 }
