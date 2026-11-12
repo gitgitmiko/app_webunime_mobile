@@ -22,6 +22,7 @@ val WuAccentMuted = Color(0x33E11D48)
 val WuText = Color(0xFFF4F1EC)
 val WuMuted = Color(0xFF9AA3B2)
 val WuStroke = Color(0xFF2A3140)
+val WuGold = Color(0xFFFBBF24)
 
 private val scheme = darkColorScheme(
     primary = WuAccent,

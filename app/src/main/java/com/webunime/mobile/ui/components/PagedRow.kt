@@ -76,6 +76,9 @@ fun <T> PagedPosterRow(
     thumbOf: (T) -> String?,
     subtitleOf: (T) -> String? = { null },
     onClick: (T) -> Unit,
+    badgeOf: (T) -> String? = { null },
+    badgeAccent: Boolean = false,
+    wide: Boolean = false,
 ) {
     HorizontalPosterRow(
         items = state.items,
@@ -85,5 +88,8 @@ fun <T> PagedPosterRow(
         onClick = onClick,
         loadingMore = state.loading,
         onReachEnd = state::loadMore,
+        badgeOf = badgeOf,
+        badgeAccent = badgeAccent,
+        wide = wide,
     )
 }

@@ -43,13 +43,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.webunime.mobile.R
 import com.webunime.mobile.ui.theme.WuMotionShort
+import com.webunime.mobile.ui.theme.WuAccent
+import com.webunime.mobile.ui.theme.WuGold
 import com.webunime.mobile.ui.theme.WuStroke
+import com.webunime.mobile.ui.theme.WuSurfaceHigh
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
@@ -142,6 +147,9 @@ fun PosterCard(
     subtitle: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    badge: String? = null,
+    badgeAccent: Boolean = false,
+    wide: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -150,21 +158,21 @@ fun PosterCard(
         animationSpec = tween(WuMotionShort),
         label = "posterScale",
     )
-    val shape = MaterialTheme.shapes.medium
+    val shape = RoundedCornerShape(14.dp)
 
     Column(
         modifier = modifier
-            .width(124.dp)
+            .width(if (wide) 236.dp else 124.dp)
             .scale(scale)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .aspectRatio(if (wide) 16f / 9f else 2f / 3f)
                 .clip(shape)
-                .border(1.dp, WuStroke.copy(alpha = 0.55f), shape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(WuSurfaceHigh)
+                .border(1.dp, Color.White.copy(alpha = 0.06f), shape),
         ) {
             AsyncImage(
                 model = thumbnail,
@@ -175,19 +183,29 @@ fun PosterCard(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(56.dp)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)),
                         ),
                     ),
             )
+            if (!badge.isNullOrBlank()) {
+                PosterBadge(
+                    text = badge,
+                    accent = badgeAccent,
+                    modifier = Modifier
+                        .align(if (badgeAccent) Alignment.BottomStart else Alignment.TopStart)
+                        .padding(8.dp),
+                )
+            }
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 2,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = if (wide) 1 else 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -195,11 +213,37 @@ fun PosterCard(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
+    }
+}
+
+/** Pil kecil di atas poster: rating (gelap, bintang emas) atau episode (aksen). */
+@Composable
+fun PosterBadge(text: String, accent: Boolean, modifier: Modifier = Modifier) {
+    val star = text.startsWith("\u2605")
+    Row(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (accent) WuAccent else Color.Black.copy(alpha = 0.62f))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (star) {
+            Text("\u2605", color = WuGold, fontSize = 11.sp)
+            Spacer(Modifier.width(3.dp))
+        }
+        Text(
+            text = if (star) text.removePrefix("\u2605").trim() else text,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -212,6 +256,9 @@ fun <T> HorizontalPosterRow(
     onClick: (T) -> Unit,
     loadingMore: Boolean = false,
     onReachEnd: (() -> Unit)? = null,
+    badgeOf: (T) -> String? = { null },
+    badgeAccent: Boolean = false,
+    wide: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     if (onReachEnd != null) {
@@ -230,7 +277,7 @@ fun <T> HorizontalPosterRow(
     LazyRow(
         state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         itemsIndexed(
             items = items,
@@ -241,6 +288,9 @@ fun <T> HorizontalPosterRow(
                 thumbnail = thumbOf(item),
                 subtitle = subtitleOf(item),
                 onClick = { onClick(item) },
+                badge = badgeOf(item),
+                badgeAccent = badgeAccent,
+                wide = wide,
             )
         }
         if (loadingMore) {
@@ -248,7 +298,7 @@ fun <T> HorizontalPosterRow(
                 Box(
                     Modifier
                         .width(64.dp)
-                        .height(186.dp),
+                        .height(if (wide) 132.dp else 186.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(

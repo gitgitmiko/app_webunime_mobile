@@ -37,7 +37,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -46,14 +45,11 @@ import com.webunime.mobile.data.AnimeCard
 import com.webunime.mobile.data.FilmHome
 import com.webunime.mobile.data.HomeResponse
 import com.webunime.mobile.data.LatestItem
-import com.webunime.mobile.ui.components.BrandHeader
 import com.webunime.mobile.ui.components.HorizontalPosterRow
 import com.webunime.mobile.ui.components.PagedPosterRow
 import com.webunime.mobile.ui.components.PagedRowState
-import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.components.rememberPagedRow
 import com.webunime.mobile.ui.theme.WuBg
-import com.webunime.mobile.ui.theme.WuSurface
 import kotlinx.coroutines.launch
 
 @Composable
@@ -102,11 +98,7 @@ fun HomeScreen(
         Modifier
             .fillMaxSize()
             .padding(contentPadding)
-            .background(
-                Brush.verticalGradient(
-                    listOf(WuSurface.copy(alpha = 0.9f), WuBg, WuBg),
-                ),
-            ),
+            .background(WuBg),
     ) {
         AnimatedContent(
             targetState = when {
@@ -118,9 +110,7 @@ fun HomeScreen(
             label = "homeState",
         ) { state ->
             when (state) {
-                "loading" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
+                "loading" -> HomeSkeleton()
                 "error" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(error ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,33 +131,35 @@ fun HomeScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 28.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
                         item {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onChangeCatalog) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Katalog")
-                                }
-                                Text(
-                                    "Anime",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                RoomsButton(onOpenRooms)
-                                NotificationsButton(onOpenNotifications)
-                            }
+                            HomeTopBar(
+                                title = "Anime",
+                                subtitle = "Katalog anime terbaru & jadwal rilis",
+                                onBack = onChangeCatalog,
+                                onOpenRooms = onOpenRooms,
+                                onOpenNotifications = onOpenNotifications,
+                            )
                         }
-                        item { BrandHeader() }
+                        item {
+                            HeroCarousel(
+                                data.anime.filter { !it.slug.isNullOrBlank() }.take(6).map { card ->
+                                    card.toHero("ANIME") { card.slug?.let(onOpenAnime) }
+                                },
+                            )
+                        }
                         favoritesRow(anime = true, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
                         if (data.latest.isNotEmpty()) {
-                            item { SectionTitle("Anime Terbaru") }
+                            item { HomeSection("Episode Terbaru", "Baru saja rilis") }
                             item {
                                 PagedPosterRow(
                                     state = latestRow,
                                     titleOf = { it.displayTitle() },
                                     thumbOf = { it.thumbnail },
-                                    subtitleOf = { it.episode?.let { e -> "Ep $e" } },
+                                    badgeOf = { it.episode?.let { e -> "Ep $e" } },
+                                    badgeAccent = true,
+                                    wide = true,
                                     onClick = { item ->
                                         val slug = item.catalogSlug()
                                         if (slug.isNotBlank()) onOpenAnime(slug)
@@ -175,44 +167,42 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        if (data.anime.isNotEmpty()) {
-                            item { SectionTitle("Anime") }
-                            item {
-                                PagedPosterRow(
-                                    state = animeRow,
-                                    titleOf = { it.displayTitle() },
-                                    thumbOf = { it.thumbnail },
-                                    subtitleOf = {
-                                        it.rating?.takeIf { r -> r.isNotBlank() }
-                                            ?.let { r -> "\u2605 $r" }
-                                    },
-                                    onClick = { item -> item.slug?.let(onOpenAnime) },
-                                )
-                            }
-                        }
-                        if (data.movies.isNotEmpty()) {
-                            item { SectionTitle("Anime Movie") }
-                            item {
-                                PagedPosterRow(
-                                    state = moviesRow,
-                                    titleOf = { it.displayTitle() },
-                                    thumbOf = { it.thumbnail },
-                                    subtitleOf = {
-                                        it.rating?.takeIf { r -> r.isNotBlank() }
-                                            ?.let { r -> "\u2605 $r" }
-                                    },
-                                    onClick = { item -> item.slug?.let(onOpenAnime) },
-                                )
-                            }
-                        }
                         data.scheduleToday?.takeIf { it.items.isNotEmpty() }?.let { day ->
-                            item { SectionTitle("Jadwal ${day.label ?: "Hari Ini"}") }
+                            item { HomeSection("Tayang ${day.label ?: "Hari Ini"}", "Jadwal rilis episode") }
                             item {
                                 HorizontalPosterRow(
                                     items = day.items,
                                     titleOf = { it.displayTitle() },
                                     thumbOf = { it.thumbnail },
-                                    subtitleOf = { it.time },
+                                    badgeOf = { it.time },
+                                    badgeAccent = true,
+                                    subtitleOf = { it.genre?.firstOrNull() },
+                                    onClick = { item -> item.slug?.let(onOpenAnime) },
+                                )
+                            }
+                        }
+                        if (data.anime.isNotEmpty()) {
+                            item { HomeSection("Jelajahi Anime", "Serial terbaru di katalog") }
+                            item {
+                                PagedPosterRow(
+                                    state = animeRow,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    badgeOf = ::ratingLabel,
+                                    subtitleOf = ::genreLabel,
+                                    onClick = { item -> item.slug?.let(onOpenAnime) },
+                                )
+                            }
+                        }
+                        if (data.movies.isNotEmpty()) {
+                            item { HomeSection("Anime Movie", "Film layar lebar") }
+                            item {
+                                PagedPosterRow(
+                                    state = moviesRow,
+                                    titleOf = { it.displayTitle() },
+                                    thumbOf = { it.thumbnail },
+                                    badgeOf = ::ratingLabel,
+                                    subtitleOf = ::genreLabel,
                                     onClick = { item -> item.slug?.let(onOpenAnime) },
                                 )
                             }
@@ -257,14 +247,10 @@ private fun FilmCatalog(
         Modifier
             .fillMaxSize()
             .padding(contentPadding)
-            .background(
-                Brush.verticalGradient(listOf(WuSurface.copy(alpha = 0.9f), WuBg, WuBg)),
-            ),
+            .background(WuBg),
     ) {
         when {
-            loading && home == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
+            loading && home == null -> HomeSkeleton()
             error != null && home == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(error ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -288,38 +274,36 @@ private fun FilmCatalog(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     item {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Katalog")
-                            }
-                            Text(
-                                "Film",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            RoomsButton(onOpenRooms)
-                            NotificationsButton(onOpenNotifications)
-                        }
+                        HomeTopBar(
+                            title = "Film",
+                            subtitle = "Film, horor & series terbaru",
+                            onBack = onBack,
+                            onOpenRooms = onOpenRooms,
+                            onOpenNotifications = onOpenNotifications,
+                        )
+                    }
+                    item {
+                        HeroCarousel(
+                            data.latestMovies.filter { !it.slug.isNullOrBlank() }.take(6).map { card ->
+                                card.toHero("BARU") { openFilm(card, "movies", onOpenTitle) }
+                            },
+                        )
                     }
                     favoritesRow(anime = false, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
-                    filmRow("Film Terbaru", moviesRow, "movies", onOpenTitle)
-                    filmRow("Top Film", data.topMovies, "movies", onOpenTitle)
-                    filmRow("Horor Terbaru", horrorRow, "horror", onOpenTitle)
-                    filmRow("Top Horor", data.topHorror, "horror", onOpenTitle)
+                    filmRow("Film Terbaru", "Baru ditambahkan", moviesRow, "movies", onOpenTitle)
+                    rankedRow("Top 10 Film", data.topMovies, "movies", onOpenTitle)
                     if (data.latestSeries.isNotEmpty()) {
-                        item { SectionTitle("Series Terbaru") }
+                        item { HomeSection("Episode Series Terbaru", "Lanjutkan series favoritmu") }
                         item {
                             PagedPosterRow(
                                 state = latestSeriesRow,
                                 titleOf = { it.displayTitle() },
                                 thumbOf = { it.thumbnail },
-                                subtitleOf = { item ->
-                                    item.episode?.let { ep -> "Ep $ep" }
-                                },
+                                badgeOf = { item -> item.episode?.let { ep -> "Ep $ep" } },
+                                badgeAccent = true,
                                 onClick = { item ->
                                     val slug = item.catalogSlug()
                                     if (slug.isNotBlank()) {
@@ -329,7 +313,9 @@ private fun FilmCatalog(
                             )
                         }
                     }
-                    filmRow("Series", seriesRow, "series", onOpenTitle)
+                    filmRow("Horor Terbaru", "Siap-siap merinding", horrorRow, "horror", onOpenTitle)
+                    rankedRow("Top 10 Horor", data.topHorror, "horror", onOpenTitle)
+                    filmRow("Series", "Serial TV pilihan", seriesRow, "series", onOpenTitle)
                     if (
                         data.latestMovies.isEmpty() &&
                         data.latestHorror.isEmpty() &&
@@ -350,20 +336,20 @@ private fun FilmCatalog(
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
+private fun androidx.compose.foundation.lazy.LazyListScope.rankedRow(
     title: String,
     items: List<AnimeCard>,
     collection: String,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
 ) {
     if (items.isEmpty()) return
-    item { SectionTitle(title) }
+    item { HomeSection(title, "Paling banyak disukai") }
     item {
-        HorizontalPosterRow(
+        RankedRow(
             items = items,
             titleOf = { it.displayTitle() },
             thumbOf = { it.thumbnail },
-            subtitleOf = ::ratingLabel,
+            badgeOf = ::ratingLabel,
             onClick = { openFilm(it, collection, onOpenTitle) },
         )
     }
@@ -372,41 +358,22 @@ private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
 /** Baris film yang memuat page berikutnya setiap kali digeser sampai mentok. */
 private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
     title: String,
+    subtitle: String,
     row: PagedRowState<AnimeCard>,
     collection: String,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
 ) {
     if (row.items.isEmpty()) return
-    item { SectionTitle(title) }
+    item { HomeSection(title, subtitle) }
     item {
         PagedPosterRow(
             state = row,
             titleOf = { it.displayTitle() },
             thumbOf = { it.thumbnail },
-            subtitleOf = ::ratingLabel,
+            badgeOf = ::ratingLabel,
+            subtitleOf = ::genreLabel,
             onClick = { openFilm(it, collection, onOpenTitle) },
         )
-    }
-}
-
-@Composable
-private fun RoomsButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-        Text("Nonton Bareng")
-    }
-}
-
-@Composable
-private fun NotificationsButton(onClick: () -> Unit) {
-    val app = LocalContext.current.applicationContext as WebunimeApp
-    val user by app.webAuth.user.collectAsState()
-    if (user == null) return
-    val unread = app.episodeAlerts.inbox.collectAsState().value.count { !it.read }
-    IconButton(onClick = onClick) {
-        BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 9) "9+" else "$unread") } }) {
-            Icon(Icons.Default.Notifications, contentDescription = "Notifikasi")
-        }
     }
 }
 
@@ -422,10 +389,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.favoritesRow(
         val shown = favorites.filter { it.isAnimeCatalog() == anime }
         if (shown.isEmpty()) return@item
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionTitle("Favorit Saya", modifier = Modifier.weight(1f))
-                TextButton(onClick = onSeeAll) { Text("Lihat semua") }
-            }
+            HomeSection("Favorit Saya", "Tersimpan di akunmu", action = "Lihat semua", onAction = onSeeAll)
             HorizontalPosterRow(
                 items = shown,
                 titleOf = { it.displayTitle() },
@@ -437,7 +401,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.favoritesRow(
 }
 
 private fun ratingLabel(card: AnimeCard): String? =
-    card.rating?.takeIf { it.isNotBlank() }?.let { "\u2605 $it" }
+    card.rating?.takeIf { it.isNotBlank() && it != "0" }?.let { "\u2605 $it" }
+
+private fun genreLabel(card: AnimeCard): String? =
+    card.genre?.take(2)?.joinToString(" \u00b7 ")?.takeIf { it.isNotBlank() }
+
+private fun AnimeCard.toHero(tag: String, onClick: () -> Unit) = HeroItem(
+    title = displayTitle(),
+    thumbnail = thumbnail,
+    rating = rating?.takeIf { it.isNotBlank() && it != "0" },
+    genres = genre.orEmpty(),
+    tag = tag,
+    onClick = onClick,
+)
 
 private fun openFilm(
     card: AnimeCard,
