@@ -75,6 +75,16 @@ import com.webunime.mobile.ui.theme.WuText
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.util.Calendar
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.style.TextOverflow
+import com.webunime.mobile.data.auth.WebUser
+import com.webunime.mobile.ui.account.AuthDialog
+import kotlinx.coroutines.launch
 
 private val PosterW = 92.dp
 private val PosterH = 136.dp
@@ -115,8 +125,12 @@ fun CatalogChooserScreen(
                 .padding(horizontal = 20.dp),
         ) {
             Spacer(Modifier.height(12.dp))
-            BrandLogo(height = 34.dp)
-            Spacer(Modifier.height(132.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BrandLogo(height = 34.dp, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.weight(1f))
+                AccountChip(user)
+            }
+            Spacer(Modifier.height(120.dp))
 
             Appear {
                 Column {
@@ -398,5 +412,104 @@ private fun FeatureTile(icon: ImageVector, title: String, subtitle: String, modi
         Spacer(Modifier.height(10.dp))
         Text(title, color = WuText, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         Text(subtitle, color = WuMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
+
+/** Pojok kanan atas: tombol Masuk untuk tamu, atau info akun yang sedang masuk. */
+@Composable
+private fun AccountChip(user: WebUser?) {
+    val app = LocalContext.current.applicationContext as WebunimeApp
+    val scope = rememberCoroutineScope()
+    var authDialog by remember { mutableStateOf<Boolean?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    authDialog?.let { register -> AuthDialog(onDismiss = { authDialog = null }, initialRegister = register) }
+
+    if (user == null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Tamu",
+                color = WuMuted,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .border(1.dp, WuStroke, CircleShape)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            Row(
+                Modifier
+                    .clip(CircleShape)
+                    .background(WuAccent)
+                    .clickable { authDialog = false }
+                    .padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Masuk", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        return
+    }
+
+    Box {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .background(WuSurfaceHigh)
+                .border(1.dp, WuStroke, CircleShape)
+                .clickable { menu = true }
+                .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFFE11D48), Color(0xFF7C3AED)))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    user.label().take(1).uppercase(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(
+                    user.label(),
+                    color = WuText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 120.dp),
+                )
+                user.username?.let {
+                    Text(
+                        "@$it",
+                        color = WuMuted,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 120.dp),
+                    )
+                }
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            user.email?.let {
+                DropdownMenuItem(text = { Text(it, color = WuMuted, fontSize = 12.sp) }, onClick = {}, enabled = false)
+            }
+            DropdownMenuItem(
+                text = { Text("Keluar") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
+                onClick = {
+                    menu = false
+                    scope.launch { app.webAuth.logout() }
+                },
+            )
+        }
     }
 }

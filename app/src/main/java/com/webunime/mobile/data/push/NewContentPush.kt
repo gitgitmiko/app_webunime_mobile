@@ -18,6 +18,8 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.webunime.mobile.MainActivity
 import com.webunime.mobile.R
+import com.webunime.mobile.WebunimeApp
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +60,19 @@ class NewContentPush(context: Context) {
         ContentKind.entries.forEach { apply(it, isEnabled(it)) }
     }
 
+    /**
+     * Samakan langganan topic episode favorit dengan daftar favorit akun yang masuk
+     * (kosong saat keluar). Yang sudah dilanggan dicatat supaya bisa dilepas lagi.
+     */
+    fun syncFavoriteTopics(topics: Set<String>) {
+        val current = prefs.getStringSet("fav_topics", emptySet()).orEmpty()
+        val messaging = runCatching { FirebaseMessaging.getInstance() }.getOrNull() ?: return
+        (current - topics).forEach { messaging.unsubscribeFromTopic(it) }
+        // Subscribe ulang yang lama juga: idempoten dan memulihkan bila token FCM berganti.
+        topics.forEach { messaging.subscribeToTopic(it) }
+        prefs.edit().putStringSet("fav_topics", topics).apply()
+    }
+
     private fun apply(kind: ContentKind, on: Boolean) {
         runCatching {
             val messaging = FirebaseMessaging.getInstance()
@@ -67,6 +82,10 @@ class NewContentPush(context: Context) {
 
     companion object {
         const val CHANNEL_ID = "konten_baru"
+
+        /** Harus sama dengan favoriteTopic() di scripts/notify-new-content.js server. */
+        fun favoriteTopic(collection: String, slug: String): String =
+            "fav-$collection-${slug.lowercase()}".replace(Regex("[^a-zA-Z0-9\\-_.~%]"), "_").take(900)
 
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -84,6 +103,10 @@ class NewContentPush(context: Context) {
 class WebunimeMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        if (data["type"] == "fav_episode") {
+            handleFavoriteEpisode(data)
+            return
+        }
         if (data["type"] != "new_content") return
         val kind = ContentKind.entries.firstOrNull { it.key == data["kind"] } ?: return
         // Pilihan bisa dimatikan saat pesan masih di antrean FCM.
@@ -125,6 +148,28 @@ class WebunimeMessagingService : FirebaseMessagingService() {
             builder.setLargeIcon(poster)
         }
         runCatching { NotificationManagerCompat.from(this).notify(notifId, builder.build()) }
+    }
+
+    /** Episode baru judul favorit: diteruskan ke EpisodeAlerts supaya masuk kotak notifikasi akun. */
+    private fun handleFavoriteEpisode(data: Map<String, String>) {
+        val collection = data["collection"]?.takeIf { it.isNotBlank() } ?: return
+        val slug = data["slug"]?.takeIf { it.isNotBlank() } ?: return
+        val episode = data["episode"]?.toIntOrNull() ?: return
+        val app = applicationContext as WebunimeApp
+        val poster = data["image"]?.takeIf { it.startsWith("http") }?.let(::downloadBitmap)
+        runBlocking {
+            app.webAuth.awaitRestored()
+            if (app.favorites.items.value.isEmpty()) runCatching { app.favorites.refresh() }
+            app.episodeAlerts.onPush(
+                collection = collection,
+                slug = slug,
+                episode = episode,
+                label = data["label"]?.takeIf { it.isNotBlank() } ?: "Episode $episode",
+                title = data["title"].orEmpty(),
+                thumbnail = data["image"],
+                poster = poster,
+            )
+        }
     }
 
     /** Token tidak dipakai: server mengirim ke topic. */

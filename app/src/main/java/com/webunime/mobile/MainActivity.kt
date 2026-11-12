@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -116,7 +117,7 @@ class MainActivity : ComponentActivity() {
                 val route = backStack?.destination?.route.orEmpty()
                 var catalogMode by rememberSaveable { mutableStateOf<String?>(null) }
                 val showBottom = catalogMode != null &&
-                    route in setOf("home", "search", "calendar", "settings")
+                    route in setOf("home", "favorites-tab", "search", "calendar", "settings")
                 var updateCheckTrigger by remember { mutableIntStateOf(0) }
 
                 fun openTitle(collection: String, slug: String, episode: Int = -1) {
@@ -194,6 +195,15 @@ class MainActivity : ComponentActivity() {
                                     colors = colors,
                                 )
                                 NavigationBarItem(
+                                    selected = route == "favorites-tab",
+                                    onClick = {
+                                        nav.navigate("favorites-tab") { launchSingleTop = true }
+                                    },
+                                    icon = { Icon(Icons.Default.Favorite, null) },
+                                    label = { Text("Favorit") },
+                                    colors = colors,
+                                )
+                                NavigationBarItem(
                                     selected = route == "search",
                                     onClick = {
                                         nav.navigate("search") { launchSingleTop = true }
@@ -251,7 +261,6 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onChangeCatalog = { goChoose() },
                                 onOpenRooms = { nav.navigate("rooms") { launchSingleTop = true } },
-                                onOpenFavorites = { nav.navigate("favorites") { launchSingleTop = true } },
                                 onOpenNotifications = { nav.navigate("notifications") { launchSingleTop = true } },
                             )
                         }
@@ -278,6 +287,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("rooms") {
                             RoomsScreen(onBack = { nav.popBackStack() })
+                        }
+                        composable("favorites-tab") {
+                            FavoritesScreen(
+                                onBack = null,
+                                onOpenTitle = { collection, slug, episode -> openTitle(collection, slug, episode) },
+                            )
                         }
                         composable("favorites") {
                             FavoritesScreen(

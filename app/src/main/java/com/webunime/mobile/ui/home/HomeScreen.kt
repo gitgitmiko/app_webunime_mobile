@@ -59,7 +59,6 @@ fun HomeScreen(
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
     onChangeCatalog: () -> Unit,
     onOpenRooms: () -> Unit = {},
-    onOpenFavorites: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
 ) {
@@ -69,7 +68,6 @@ fun HomeScreen(
             onBack = onChangeCatalog,
             onOpenTitle = onOpenTitle,
             onOpenRooms = onOpenRooms,
-            onOpenFavorites = onOpenFavorites,
             onOpenNotifications = onOpenNotifications,
         )
         return
@@ -149,7 +147,6 @@ fun HomeScreen(
                                 },
                             )
                         }
-                        favoritesRow(anime = true, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
                         if (data.latest.isNotEmpty()) {
                             item { HomeSection("Episode Terbaru", "Baru saja rilis") }
                             item {
@@ -221,7 +218,6 @@ private fun FilmCatalog(
     onBack: () -> Unit,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
     onOpenRooms: () -> Unit,
-    onOpenFavorites: () -> Unit,
     onOpenNotifications: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
@@ -292,7 +288,6 @@ private fun FilmCatalog(
                             },
                         )
                     }
-                    favoritesRow(anime = false, onOpenTitle = onOpenTitle, onSeeAll = onOpenFavorites)
                     filmRow("Film Terbaru", "Baru ditambahkan", moviesRow, "movies", onOpenTitle)
                     rankedRow("Top 10 Film", data.topMovies, "movies", onOpenTitle)
                     if (data.latestSeries.isNotEmpty()) {
@@ -374,29 +369,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.filmRow(
             subtitleOf = ::genreLabel,
             onClick = { openFilm(it, collection, onOpenTitle) },
         )
-    }
-}
-
-/** Baris "Favorit Saya" (akun yang masuk saja), dipisah per katalog anime / film. */
-private fun androidx.compose.foundation.lazy.LazyListScope.favoritesRow(
-    anime: Boolean,
-    onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
-    onSeeAll: () -> Unit,
-) {
-    item(key = "favorites-row") {
-        val app = LocalContext.current.applicationContext as WebunimeApp
-        val favorites by app.favorites.items.collectAsState()
-        val shown = favorites.filter { it.isAnimeCatalog() == anime }
-        if (shown.isEmpty()) return@item
-        Column {
-            HomeSection("Favorit Saya", "Tersimpan di akunmu", action = "Lihat semua", onAction = onSeeAll)
-            HorizontalPosterRow(
-                items = shown,
-                titleOf = { it.displayTitle() },
-                thumbOf = { it.thumbnail },
-                onClick = { fav -> onOpenTitle(fav.appCollection(), fav.slug, -1) },
-            )
-        }
     }
 }
 

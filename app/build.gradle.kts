@@ -16,8 +16,8 @@ android {
         applicationId = "com.webunime.mobile"
         minSdk = 24
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.7.2"
+        versionCode = 22
+        versionName = "0.7.3"
 
         buildConfigField(
             "String",

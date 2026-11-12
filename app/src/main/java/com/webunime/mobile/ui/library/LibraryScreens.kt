@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,7 +58,7 @@ import kotlinx.coroutines.launch
 /** Daftar favorit akun (sama dengan web). */
 @Composable
 fun FavoritesScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpenTitle: (collection: String, slug: String, episode: Int) -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as WebunimeApp
@@ -199,7 +201,7 @@ fun NotificationsScreen(
 @Composable
 private fun LibraryScaffold(
     title: String,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     action: (@Composable () -> Unit)?,
     content: @Composable () -> Unit,
 ) {
@@ -208,9 +210,16 @@ private fun LibraryScaffold(
             .fillMaxSize()
             .background(WuBg),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                }
+            } else {
+                Spacer(Modifier.width(16.dp))
             }
             Text(
                 title,

@@ -51,6 +51,10 @@ class FavoritesRepository(private val auth: WebunimeAuth) {
     private val _items = MutableStateFlow<List<FavoriteItem>>(emptyList())
     val items: StateFlow<List<FavoriteItem>> = _items.asStateFlow()
 
+    /** True setelah daftar akun berhasil dimuat; sebelum itu [items] kosong belum tentu berarti tak ada favorit. */
+    private val _loaded = MutableStateFlow(false)
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
     suspend fun refresh(): List<FavoriteItem> {
         if (auth.user.value == null) {
             _items.value = emptyList()
@@ -58,6 +62,7 @@ class FavoritesRepository(private val auth: WebunimeAuth) {
         }
         val list = listAdapter.fromJson(auth.send(Request.Builder().url(url()).get()))?.items.orEmpty()
         _items.value = list
+        _loaded.value = true
         return list
     }
 
@@ -81,6 +86,7 @@ class FavoritesRepository(private val auth: WebunimeAuth) {
 
     fun clear() {
         _items.value = emptyList()
+        _loaded.value = false
     }
 
     private fun url(vararg segments: String): HttpUrl =

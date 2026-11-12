@@ -14,7 +14,9 @@ import com.webunime.mobile.data.user.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -75,6 +77,19 @@ class WebunimeApp : Application() {
                     runCatching { episodeAlerts.check() }
                 }
             }
+        }
+
+        // Topic push episode favorit mengikuti akun & daftar favoritnya.
+        appScope.launch {
+            combine(webAuth.user, favorites.items, favorites.loaded) { user, items, loaded ->
+                when {
+                    user == null -> emptySet()
+                    !loaded -> null
+                    else -> items.filter { it.hasEpisodes() }
+                        .map { NewContentPush.favoriteTopic(it.collection, it.slug) }
+                        .toSet()
+                }
+            }.filterNotNull().distinctUntilChanged().collect { newContentPush.syncFavoriteTopics(it) }
         }
 
         appScope.launch {

@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -168,7 +169,44 @@ class EpisodeAlerts(
         fresh.size
     }
 
-    private fun notify(alert: EpisodeAlert) {
+    /**
+     * Push real-time dari server (topic favorit). Diabaikan bila judul bukan favorit akun
+     * yang masuk atau episodenya sudah pernah diberitahukan lewat pengecekan berkala.
+     */
+    suspend fun onPush(
+        collection: String,
+        slug: String,
+        episode: Int,
+        label: String,
+        title: String,
+        thumbnail: String?,
+        poster: Bitmap?,
+    ) = mutex.withLock {
+        val user = auth.user.value ?: return@withLock
+        val fav = favorites.items.value.firstOrNull {
+            it.collection == collection && it.slug.equals(slug, ignoreCase = true)
+        } ?: return@withLock
+        val k = key(collection, slug)
+        val base = readBaseline(user.id)
+        if (base.has(k) && base.optInt(k) >= episode) return@withLock
+        base.put(k, episode)
+        prefs.edit().putString("base_${user.id}", base.toString()).apply()
+        val alert = EpisodeAlert(
+            id = "$k#$episode",
+            collection = collection,
+            slug = fav.slug,
+            title = title.ifBlank { fav.displayTitle() },
+            thumbnail = thumbnail ?: fav.thumbnail,
+            episode = episode,
+            newCount = 1,
+            at = System.currentTimeMillis(),
+            read = false,
+        )
+        writeInbox(user.id, (listOf(alert) + readInbox(user.id).filterNot { it.id == alert.id }).take(MAX_INBOX))
+        notify(alert, label, poster)
+    }
+
+    private fun notify(alert: EpisodeAlert, label: String? = null, poster: Bitmap? = null) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(appContext, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -188,10 +226,17 @@ class EpisodeAlerts(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val name = auth.user.value?.label()
+        val episodeText = label ?: if (alert.newCount > 1) "${alert.newCount} episode baru" else "Episode ${alert.episode}"
+        val body = (if (name != null) "Hai $name, " else "") +
+            "$episodeText dari favoritmu sudah rilis. Ketuk untuk nonton."
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(alert.title)
-            .setContentText(alert.message())
+            .setContentTitle("${alert.title} \u00b7 $episodeText")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSubText(name)
+            .apply { poster?.let { setLargeIcon(it) } }
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
