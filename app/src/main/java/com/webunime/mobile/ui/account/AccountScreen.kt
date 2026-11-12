@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -32,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.webunime.mobile.BuildConfig
 import com.webunime.mobile.WebunimeApp
+import com.webunime.mobile.data.push.ContentKind
 import com.webunime.mobile.ui.components.BrandLogo
 import com.webunime.mobile.ui.components.SectionTitle
 import com.webunime.mobile.ui.theme.Appear
@@ -157,6 +160,37 @@ fun AccountScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = MaterialTheme.shapes.medium,
                             ) { Text(if (unread > 0) "Notifikasi ($unread)" else "Notifikasi") }
+                        }
+                    }
+                }
+            }
+
+            Appear(delayMs = 55) {
+                val pushOn by app.newContentPush.enabled.collectAsState()
+                SettingsCard {
+                    SectionTitle(
+                        "Notifikasi Konten Baru",
+                        modifier = Modifier.padding(horizontal = 0.dp, vertical = 0.dp),
+                    )
+                    Text(
+                        "Kabari saat ada judul baru di katalog. Tidak perlu masuk akun.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ContentKind.entries.forEach { kind ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${kind.label} baru",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = pushOn[kind] ?: true,
+                                onCheckedChange = { app.newContentPush.setEnabled(kind, it) },
+                            )
                         }
                     }
                 }

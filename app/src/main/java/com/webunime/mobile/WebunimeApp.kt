@@ -9,6 +9,7 @@ import com.webunime.mobile.data.billing.BillingRepository
 import com.webunime.mobile.data.library.EpisodeAlerts
 import com.webunime.mobile.data.library.FavoritesRepository
 import com.webunime.mobile.data.party.WatchPartyApi
+import com.webunime.mobile.data.push.NewContentPush
 import com.webunime.mobile.data.user.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,8 @@ class WebunimeApp : Application() {
         private set
     lateinit var episodeAlerts: EpisodeAlerts
         private set
+    lateinit var newContentPush: NewContentPush
+        private set
     lateinit var rewardedAds: RewardedAdManager
         private set
     lateinit var billingRepository: BillingRepository
@@ -49,6 +52,7 @@ class WebunimeApp : Application() {
         watchParty = WatchPartyApi(webAuth)
         favorites = FavoritesRepository(webAuth)
         episodeAlerts = EpisodeAlerts(this, webAuth, favorites, catalogApi)
+        newContentPush = NewContentPush(this)
         rewardedAds = RewardedAdManager(this)
         billingRepository = BillingRepository(this)
 
@@ -58,6 +62,8 @@ class WebunimeApp : Application() {
         appScope.launch { webAuth.restore() }
         EpisodeAlerts.ensureChannel(this)
         EpisodeAlerts.schedule(this)
+        NewContentPush.ensureChannel(this)
+        newContentPush.sync()
 
         // Ganti akun: muat favorit & kotak notifikasi akun itu, lalu cek episode baru.
         appScope.launch {

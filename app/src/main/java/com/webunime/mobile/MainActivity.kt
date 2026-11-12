@@ -1,8 +1,14 @@
 ﻿package com.webunime.mobile
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -75,6 +81,22 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(EXTRA_OPEN_SLUG)
     }
 
+    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    /** Notifikasi konten baru aktif bawaan, jadi minta izin sekali di awal (Android 13+). */
+    private fun askNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val prefs = getSharedPreferences("new_content_push", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("asked_permission", false)) return
+        prefs.edit().putBoolean("asked_permission", true).apply()
+        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         readOpenRequest(intent)
@@ -83,7 +105,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) readOpenRequest(intent)
+        if (savedInstanceState == null) {
+            readOpenRequest(intent)
+            askNotificationPermissionOnce()
+        }
         setContent {
             WebunimeTheme {
                 val nav = rememberNavController()
